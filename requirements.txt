@@ -1,0 +1,7 @@
+pygame
+gym
+highway-env
+jupyterlab
+notebook
+matplotlib
+pre-commit
