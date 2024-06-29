@@ -1,7 +1,9 @@
 pygame
 gym
+tqdm
 highway-env
 jupyterlab
 notebook
 matplotlib
 pre-commit
+moviepy
