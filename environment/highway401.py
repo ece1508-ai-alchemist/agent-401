@@ -11,7 +11,8 @@ from highway_env.road.lane import (
     StraightLane,
 )
 from highway_env.road.regulation import RegulatedRoad
-from highway_env.road.road import RoadNetwork
+from highway_env.road.road import Road, RoadNetwork
+from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.objects import Obstacle
 
@@ -31,68 +32,61 @@ class Highway401(AbstractEnv):
         -----
     """  # noqa
 
-    ACTIONS: Dict[int, str] = {0: "SLOWER", 1: "IDLE", 2: "FASTER"}
-    ACTIONS_INDEXES = {v: k for k, v in ACTIONS.items()}
-
     @classmethod
     def default_config(cls) -> dict:
         config = super().default_config()
         config.update(
             {
-                "observation": {
-                    "type": "Kinematics",
-                    "vehicles_count": 15,
-                    "features": ["presence", "x", "y", "vx", "vy", "cos_h", "sin_h"],
-                    "features_range": {
-                        "x": [-100, 100],
-                        "y": [-100, 100],
-                        "vx": [-20, 20],
-                        "vy": [-20, 20],
-                    },
-                    "absolute": True,
-                    "flatten": False,
-                    "observe_intentions": False,
-                },
-                "action": {
-                    "type": "DiscreteMetaAction",
-                    "longitudinal": True,
-                    "lateral": False,
-                    "target_speeds": [0, 4.5, 9],
-                },
-                "duration": 13,  # [s]
-                "destination": "o1",
-                "controlled_vehicles": 1,
-                "initial_vehicle_count": 10,
-                "spawn_probability": 0.6,
-                "screen_width": 1600,
-                "screen_height": 1600,
-                "centering_position": [0.5, 0.8],
-                "scaling": 5.5 * 1.3,
-                "collision_reward": -5,
-                "high_speed_reward": 1,
-                "arrived_reward": 1,
-                "reward_speed_range": [7.0, 9.0],
-                "normalize_reward": False,
-                "offroad_terminal": False,
+                "collision_reward": -1,
+                "right_lane_reward": 0.1,
+                "high_speed_reward": 0.2,
+                "reward_speed_range": [5, 30],
+                "merging_speed_reward": -0.5,
+                "lane_change_reward": -0.05,
+                "screen_width": 600,
+                "screen_height": 600,
+                "offroad_terminal": True,
             }
         )
         return config
 
     def _reward(self, action: int) -> float:
-        """Aggregated reward, for cooperative agents."""
-        return sum(
-            self._agent_reward(action, vehicle) for vehicle in self.controlled_vehicles
-        ) / len(self.controlled_vehicles)
+        """
+        The vehicle is rewarded for driving with high speed on lanes to the right and avoiding collisions
+
+        But an additional altruistic penalty is also suffered if any vehicle on the merging lane has a low speed.
+
+        :param action: the action performed
+        :return: the reward of the state-action transition
+        """
+        reward = sum(
+            self.config.get(name, 0) * reward
+            for name, reward in self._rewards(action).items()
+        )
+        return utils.lmap(
+            reward,
+            [
+                self.config["collision_reward"] + self.config["merging_speed_reward"],
+                self.config["high_speed_reward"] + self.config["right_lane_reward"],
+            ],
+            [0, 1],
+        )
 
     def _rewards(self, action: int) -> Dict[Text, float]:
-        """Multi-objective rewards, for cooperative agents."""
-        agents_rewards = [
-            self._agent_rewards(action, vehicle) for vehicle in self.controlled_vehicles
-        ]
+        scaled_speed = utils.lmap(
+            self.vehicle.speed, self.config["reward_speed_range"], [0, 1]
+        )
         return {
-            name: sum(agent_rewards[name] for agent_rewards in agents_rewards)
-            / len(agents_rewards)
-            for name in agents_rewards[0].keys()
+            "collision_reward": self.vehicle.crashed,
+            "right_lane_reward": self.vehicle.lane_index[2] / 1,
+            "high_speed_reward": scaled_speed,
+            "lane_change_reward": action in [0, 2],
+            "merging_speed_reward": sum(  # Altruistic penalty
+                (vehicle.target_speed - vehicle.speed) / vehicle.target_speed
+                for vehicle in self.road.vehicles
+                if vehicle.lane_index == ("b", "c", 2)
+                and isinstance(vehicle, ControlledVehicle)
+            ),
         }
 
     def _agent_reward(self, action: int, vehicle: Vehicle) -> float:
@@ -124,10 +118,10 @@ class Highway401(AbstractEnv):
         }
 
     def _is_terminated(self) -> bool:
-        return (
-            any(vehicle.crashed for vehicle in self.controlled_vehicles)
-            or all(self.has_arrived(vehicle) for vehicle in self.controlled_vehicles)
-            or (self.config["offroad_terminal"] and not self.vehicle.on_road)
+        """The episode is over when a collision occurs or when the access ramp has been passed."""
+        print("crash" + str(self.vehicle.crashed))
+        return self.vehicle.crashed or (
+            self.config["offroad_terminal"] and not self.vehicle.on_road
         )
 
     def _agent_is_terminal(self, vehicle: Vehicle) -> bool:
@@ -135,28 +129,11 @@ class Highway401(AbstractEnv):
         return vehicle.crashed or self.has_arrived(vehicle)
 
     def _is_truncated(self) -> bool:
-        """The episode is truncated if the time limit is reached."""
-        return self.time >= self.config["duration"]
-
-    def _info(self, obs: np.ndarray, action: int) -> dict:
-        info = super()._info(obs, action)
-        info["agents_rewards"] = tuple(
-            self._agent_reward(action, vehicle) for vehicle in self.controlled_vehicles
-        )
-        info["agents_dones"] = tuple(
-            self._agent_is_terminal(vehicle) for vehicle in self.controlled_vehicles
-        )
-        return info
+        return False
 
     def _reset(self) -> None:
         self._make_road()
-        self._make_vehicles(self.config["initial_vehicle_count"])
-
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, dict]:
-        obs, reward, terminated, truncated, info = super().step(action)
-        self._clear_vehicles()
-        self._spawn_vehicle(spawn_probability=self.config["spawn_probability"])
-        return obs, reward, terminated, truncated, info
+        self._make_vehicles()
 
     def _make_road(self) -> None:
         """
@@ -182,204 +159,414 @@ class Highway401(AbstractEnv):
         net = RoadNetwork()
         n, c, s = LineType.NONE, LineType.CONTINUOUS, LineType.STRIPED
 
-        # Straight line
-        net.add_lane(
-            "a",
-            "b",
-            StraightLane(
-                [-300, 130],
-                [-22, 130],
-                line_types=(LineType.CONTINUOUS, LineType.STRIPED),
-                speed_limit=10,
-            ),
-        )
-
-        net.add_lane(
-            "a",
-            "b",
-            StraightLane(
-                [-300, 130 + lane_width],
-                [-170, 130 + lane_width],
-                line_types=(LineType.STRIPED, LineType.CONTINUOUS),
-                speed_limit=10,
-            ),
-        )
-        net.add_lane(
-            "a",
-            "b",
-            StraightLane(
-                [-170, 130 + lane_width],
-                [-100, 130 + lane_width],
-                line_types=(LineType.NONE, LineType.STRIPED),
-                speed_limit=10,
-            ),
-        )
-
-        net.add_lane(
-            "a",
-            "b",
-            StraightLane(
-                [-100, 130 + lane_width],
-                [-22, 130 + lane_width],
-                line_types=(LineType.NONE, LineType.CONTINUOUS),
-                speed_limit=10,
-            ),
-        )
-
-        # merging
-        amplitude = 6
-        ljk = StraightLane([-300, 150], [-250, 150], line_types=(c, c), forbidden=True)
-        lkf = SineLane(
-            [-250, 144],
-            [-200, 144],
-            amplitude,
-            2 * np.pi / (2 * -50),
-            np.pi / 2,
-            line_types=[c, c],
-            forbidden=True,
-        )
-        net.add_lane(
-            "f",
-            "b",
-            StraightLane(
-                [-200, 130 + lane_width * 2],
-                [-100, 130 + lane_width * 2],
-                line_types=(LineType.NONE, LineType.CONTINUOUS),
-                speed_limit=10,
-                forbidden=True,
-            ),
-        )
-
-        net.add_lane("j", "k", ljk)
-        net.add_lane("k", "f", lkf)
-
-        # # 2 - Circular Arc #1
-        center1 = [-22, 110]
-        radii1 = 20
-        net.add_lane(
-            "b",
-            "c",
-            CircularLane(
-                center1,
-                radii1,
-                np.deg2rad(90),
-                np.deg2rad(-1),
-                clockwise=False,
-                line_types=(LineType.CONTINUOUS, LineType.NONE),
-                speed_limit=10,
-            ),
-        )
-
-        net.add_lane(
-            "b",
-            "c",
-            CircularLane(
-                center1,
-                radii1 + 4,
-                np.deg2rad(90),
-                np.deg2rad(-1),
-                clockwise=False,
-                line_types=(LineType.STRIPED, LineType.CONTINUOUS),
-                speed_limit=10,
-            ),
-        )
-
-        for corner in range(4):
-            angle = np.radians(90 * corner)
-            is_horizontal = corner % 2
-            priority = 3 if is_horizontal else 1
-            rotation = np.array(
-                [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
-            )
-            # Incoming
-            start = rotation @ np.array(
-                [lane_width / 2, access_length + outer_distance]
-            )
-            end = rotation @ np.array([lane_width / 2, outer_distance])
-            net.add_lane(
-                "o" + str(corner),
-                "ir" + str(corner),
-                StraightLane(
-                    start,
-                    end,
-                    line_types=[s, c],
-                    priority=priority,
-                    speed_limit=10,
-                ),
-            )
-            # Right turn
-            r_center = rotation @ (np.array([outer_distance, outer_distance]))
-            net.add_lane(
-                "ir" + str(corner),
-                "il" + str((corner - 1) % 4),
-                CircularLane(
-                    r_center,
-                    right_turn_radius,
-                    angle + np.radians(180),
-                    angle + np.radians(270),
-                    line_types=[n, c],
-                    priority=priority,
-                    speed_limit=10,
-                ),
-            )
-            # Left turn
-            l_center = rotation @ (
-                np.array(
-                    [
-                        -left_turn_radius + lane_width / 2,
-                        left_turn_radius - lane_width / 2,
-                    ]
-                )
-            )
-            net.add_lane(
-                "ir" + str(corner),
-                "il" + str((corner + 1) % 4),
-                CircularLane(
-                    l_center,
-                    left_turn_radius,
-                    angle + np.radians(0),
-                    angle + np.radians(-90),
-                    clockwise=False,
-                    line_types=[n, n],
-                    priority=priority - 1,
-                    speed_limit=10,
-                ),
-            )
-            # Straight
-            start = rotation @ np.array([lane_width / 2, outer_distance])
-            end = rotation @ np.array([lane_width / 2, -outer_distance])
-            net.add_lane(
-                "ir" + str(corner),
-                "il" + str((corner + 2) % 4),
-                StraightLane(
-                    start, end, line_types=[s, n], priority=priority, speed_limit=10
-                ),
-            )
-            # Exit
-            start = rotation @ np.flip(
-                [lane_width / 2, access_length + outer_distance], axis=0
-            )
-            end = rotation @ np.flip([lane_width / 2, outer_distance], axis=0)
-            net.add_lane(
-                "il" + str((corner - 1) % 4),
-                "o" + str((corner - 1) % 4),
-                StraightLane(
-                    end, start, line_types=[n, c], priority=priority, speed_limit=10
-                ),
-            )
-
-        self._add_roundabout(net)
+        # # Straight line
+        # net.add_lane(
+        #     "a",
+        #     "b",
+        #     StraightLane(
+        #         [-300, 130],
+        #         [-22, 130],
+        #         line_types=(LineType.CONTINUOUS, LineType.STRIPED),
+        #         speed_limit=10,
+        #     ),
+        # )
+        #
+        # net.add_lane(
+        #     "a",
+        #     "b",
+        #     StraightLane(
+        #         [-300, 130 + lane_width],
+        #         [-170, 130 + lane_width],
+        #         line_types=(LineType.STRIPED, LineType.CONTINUOUS),
+        #         speed_limit=10,
+        #     ),
+        # )
+        # net.add_lane(
+        #     "a",
+        #     "b",
+        #     StraightLane(
+        #         [-170, 130 + lane_width],
+        #         [-100, 130 + lane_width],
+        #         line_types=(LineType.NONE, LineType.STRIPED),
+        #         speed_limit=10,
+        #     ),
+        # )
+        #
+        # net.add_lane(
+        #     "a",
+        #     "b",
+        #     StraightLane(
+        #         [-100, 130 + lane_width],
+        #         [-22, 130 + lane_width],
+        #         line_types=(LineType.NONE, LineType.CONTINUOUS),
+        #         speed_limit=10,
+        #     ),
+        # )
+        #
+        # # merging
+        # amplitude = 6
+        # ljk = StraightLane([-300, 150], [-250, 150], line_types=(c, c), forbidden=True)
+        # lkf = SineLane(
+        #     [-250, 144],
+        #     [-200, 144],
+        #     amplitude,
+        #     2 * np.pi / (2 * -50),
+        #     np.pi / 2,
+        #     line_types=[c, c],
+        #     forbidden=True,
+        # )
+        # net.add_lane(
+        #     "f",
+        #     "b",
+        #     StraightLane(
+        #         [-200, 130 + lane_width * 2],
+        #         [-100, 130 + lane_width * 2],
+        #         line_types=(LineType.NONE, LineType.CONTINUOUS),
+        #         speed_limit=10,
+        #         forbidden=True,
+        #     ),
+        # )
+        #
+        # net.add_lane("j", "k", ljk)
+        # net.add_lane("k", "f", lkf)
+        #
+        # # # 2 - Circular Arc #1
+        # center1 = [-22, 110]
+        # radii1 = 20
+        # net.add_lane(
+        #     "b",
+        #     "c",
+        #     CircularLane(
+        #         center1,
+        #         radii1,
+        #         np.deg2rad(90),
+        #         np.deg2rad(-1),
+        #         clockwise=False,
+        #         line_types=(LineType.CONTINUOUS, LineType.NONE),
+        #         speed_limit=10,
+        #     ),
+        # )
+        #
+        # net.add_lane(
+        #     "b",
+        #     "c",
+        #     CircularLane(
+        #         center1,
+        #         radii1 + 4,
+        #         np.deg2rad(90),
+        #         np.deg2rad(-1),
+        #         clockwise=False,
+        #         line_types=(LineType.STRIPED, LineType.CONTINUOUS),
+        #         speed_limit=10,
+        #     ),
+        # )
+        #
+        # for corner in range(4):
+        #     angle = np.radians(90 * corner)
+        #     is_horizontal = corner % 2
+        #     priority = 3 if is_horizontal else 1
+        #     rotation = np.array(
+        #         [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+        #     )
+        #     # Incoming
+        #     start = rotation @ np.array(
+        #         [lane_width / 2, access_length + outer_distance]
+        #     )
+        #     end = rotation @ np.array([lane_width / 2, outer_distance])
+        #     net.add_lane(
+        #         "o" + str(corner),
+        #         "ir" + str(corner),
+        #         StraightLane(
+        #             start,
+        #             end,
+        #             line_types=[s, c],
+        #             priority=priority,
+        #             speed_limit=10,
+        #         ),
+        #     )
+        #     # Right turn
+        #     r_center = rotation @ (np.array([outer_distance, outer_distance]))
+        #     net.add_lane(
+        #         "ir" + str(corner),
+        #         "il" + str((corner - 1) % 4),
+        #         CircularLane(
+        #             r_center,
+        #             right_turn_radius,
+        #             angle + np.radians(180),
+        #             angle + np.radians(270),
+        #             line_types=[n, c],
+        #             priority=priority,
+        #             speed_limit=10,
+        #         ),
+        #     )
+        #     # Left turn
+        #     l_center = rotation @ (
+        #         np.array(
+        #             [
+        #                 -left_turn_radius + lane_width / 2,
+        #                 left_turn_radius - lane_width / 2,
+        #             ]
+        #         )
+        #     )
+        #     net.add_lane(
+        #         "ir" + str(corner),
+        #         "il" + str((corner + 1) % 4),
+        #         CircularLane(
+        #             l_center,
+        #             left_turn_radius,
+        #             angle + np.radians(0),
+        #             angle + np.radians(-90),
+        #             clockwise=False,
+        #             line_types=[n, n],
+        #             priority=priority - 1,
+        #             speed_limit=10,
+        #         ),
+        #     )
+        #     # Straight
+        #     start = rotation @ np.array([lane_width / 2, outer_distance])
+        #     end = rotation @ np.array([lane_width / 2, -outer_distance])
+        #     net.add_lane(
+        #         "ir" + str(corner),
+        #         "il" + str((corner + 2) % 4),
+        #         StraightLane(
+        #             start, end, line_types=[s, n], priority=priority, speed_limit=10
+        #         ),
+        #     )
+        #     # Exit
+        #     start = rotation @ np.flip(
+        #         [lane_width / 2, access_length + outer_distance], axis=0
+        #     )
+        #     end = rotation @ np.flip([lane_width / 2, outer_distance], axis=0)
+        #     net.add_lane(
+        #         "il" + str((corner - 1) % 4),
+        #         "o" + str((corner - 1) % 4),
+        #         StraightLane(
+        #             end, start, line_types=[n, c], priority=priority, speed_limit=10
+        #         ),
+        #     )
+        #
+        # dev = 20 # [m]
+        # a = 5  # [m]
+        # delta_st = 0.2 * dev  # [m]
+        # w = 2 * np.pi / 5
+        # delta_en = dev - delta_st
+        # # enter to roundabout
+        # net.add_lane(
+        #     "il1",
+        #     "ee",
+        #     SineLane(
+        #         [-111, -6],
+        #         [-121, -6],
+        #         4,
+        #         w,
+        #         -np.pi / 2,
+        #         line_types=(c, c),
+        #     ),
+        # )
+        # net.add_lane(
+        #     "ex",
+        #     "o1",
+        #     SineLane(
+        #         [-120, 6],
+        #         [-111, 6],
+        #         4,
+        #         w,
+        #         18.6,
+        #         line_types=(c, c),
+        #     ),
+        # )
+        # self._add_roundabout(net)
 
         road = RegulatedRoad(
             network=net,
             np_random=self.np_random,
             record_history=self.config["show_trajectories"],
         )
-        road.objects.append(Obstacle(road, [-100, 130 + lane_width * 2]))
+
+        lane_h_end, lane_v_end = self._add_straight_highway_with_merging(road)
+        self._add_road_to_enter_intersection(road, lane_h_end)
+
         self.road = road
 
+    @staticmethod
+    def _add_straight_highway_with_merging(road: RegulatedRoad) -> Tuple[int, int]:
+        net = road.network
+        lane_star = 0
+        merging_line_vertical_distance = 15
+        lane_width = AbstractLane.DEFAULT_WIDTH
+        line_length = 150
+        amplitude = 4
+        merging_straight_line_length = line_length - 50
+        merging_sine_line_length = 39
+        merging_straight_line2_length = merging_straight_line_length
+
+        # ab1 straight line 0
+        ab_0 = StraightLane(
+            [lane_star, lane_star],
+            [line_length, lane_star],
+            line_types=(LineType.CONTINUOUS, LineType.STRIPED),
+        )
+        net.add_lane("a", "b", ab_0)
+
+        ab_1 = StraightLane(
+            [lane_star, lane_star + lane_width],
+            [line_length, lane_star + lane_width],
+            line_types=(LineType.NONE, LineType.CONTINUOUS),
+        )
+        # ab1 straight line 1
+        net.add_lane(
+            "a",
+            "b",
+            ab_1,
+        )
+
+        # m1 straight merging line
+        m12 = StraightLane(
+            [lane_star, merging_line_vertical_distance],
+            [merging_straight_line_length, merging_line_vertical_distance],
+            line_types=(LineType.CONTINUOUS, LineType.CONTINUOUS),
+            forbidden=True,
+        )
+        net.add_lane(
+            "m1",
+            "m2",
+            m12,
+        )
+
+        # m2 sin merging line to b
+        m23_end = merging_straight_line_length + merging_sine_line_length
+        m23 = SineLane(
+            [merging_straight_line_length, merging_line_vertical_distance - amplitude],
+            [m23_end, merging_line_vertical_distance - amplitude],
+            amplitude,
+            2 * np.pi / (2 * -50),
+            np.pi / 2,
+            line_types=[LineType.CONTINUOUS, LineType.CONTINUOUS],
+            forbidden=True,
+        )
+        net.add_lane("m2", "b", m23)
+
+        # bc straight merging line 2
+        merging_line_end = m23_end + merging_straight_line2_length
+        m34 = StraightLane(
+            [m23_end, lane_star + 2 * lane_width],
+            [merging_line_end, lane_star + 2 * lane_width],
+            line_types=(LineType.NONE, LineType.CONTINUOUS),
+            forbidden=True,
+        )
+        net.add_lane("b", "c", m34)
+
+        # bc straight line 0
+        bc_0 = StraightLane(
+            [line_length, lane_star],
+            [merging_line_end, lane_star],
+            line_types=(LineType.CONTINUOUS, LineType.STRIPED),
+        )
+        net.add_lane("b", "c", bc_0)
+
+        bc_1 = StraightLane(
+            [lane_star, lane_star + lane_width],
+            [merging_line_end, lane_star + lane_width],
+            line_types=(LineType.NONE, LineType.STRIPED),
+        )
+        # bc straight line 1
+        net.add_lane(
+            "b",
+            "c",
+            bc_1,
+        )
+
+        # cd straight line 0
+        cd_0 = StraightLane(
+            [merging_line_end, lane_star],
+            [merging_line_end + line_length, lane_star],
+            line_types=(LineType.CONTINUOUS, LineType.STRIPED),
+            speed_limit=10,
+        )
+        cd_1 = StraightLane(
+            [merging_line_end, lane_star + lane_width],
+            [merging_line_end + line_length, lane_star + lane_width],
+            line_types=(LineType.NONE, LineType.CONTINUOUS),
+            speed_limit=10,
+        )
+        net.add_lane("c", "d", cd_0)
+        net.add_lane("c", "d", cd_1)
+
+        road.network = net
+        road.objects.append(
+            Obstacle(
+                road,
+                [m23_end + merging_straight_line2_length, lane_star + 2 * lane_width],
+            )
+        )
+        return merging_line_end + line_length, int(lane_star + lane_width)
+
+    @staticmethod
+    def _add_road_to_enter_intersection(road: RegulatedRoad, h_start: int):
+        net = road.network
+        lane_length = 20
+        lane_width = AbstractLane.DEFAULT_WIDTH
+        radii1 = 20
+        center1 = [h_start, -radii1]
+        net.add_lane(
+            "d",
+            "e",
+            CircularLane(
+                center1,
+                radii1,
+                np.deg2rad(90),
+                np.deg2rad(-1),
+                clockwise=False,
+                line_types=[LineType.CONTINUOUS, LineType.NONE],
+                speed_limit=10,
+            ),
+        )
+        net.add_lane(
+            "d",
+            "e",
+            CircularLane(
+                center1,
+                radii1 + lane_width,
+                np.deg2rad(90),
+                np.deg2rad(-1),
+                clockwise=False,
+                line_types=[LineType.STRIPED, LineType.CONTINUOUS],
+                speed_limit=10,
+            ),
+        )
+
+        h_end = h_start + radii1
+        v_end = -radii1 - lane_length
+
+        net.add_lane(
+            "e",
+            "f",
+            StraightLane(
+                [h_end, -radii1],
+                [h_end, v_end],
+                line_types=[LineType.CONTINUOUS, LineType.STRIPED],
+                speed_limit=10,
+            ),
+        )
+        net.add_lane(
+            "e",
+            "f",
+            StraightLane(
+                [h_end + lane_width, -radii1],
+                [h_end + lane_width, v_end],
+                line_types=[LineType.NONE, LineType.CONTINUOUS],
+                speed_limit=10,
+            ),
+        )
+        road.network = net
+        return h_end, v_end
+
+    def _add_intersection_to_road(
+        self, road: RegulatedRoad, h_start: int, v_start: int
+    ): ...
+
     def _add_roundabout(self, net: RoadNetwork):
-        center = [-135, 0]  # [m]
+        center = [-145, 0]  # [m]
         radius = 20  # [m]
         alpha = 24  # [deg]
 
@@ -484,120 +671,29 @@ class Highway401(AbstractEnv):
                 ),
             )
 
-    def _make_vehicles(self, n_vehicles: int = 10) -> None:
+    def _make_vehicles(self) -> None:
         """
-        Populate a road with several vehicles on the highway and on the merging lane
+        Populate a road with several vehicles on the highway and on the merging lane, as well as an ego-vehicle.
 
         :return: the ego-vehicle
         """
-        # Configure vehicles
-        vehicle_type = utils.class_from_path(self.config["other_vehicles_type"])
-        vehicle_type.DISTANCE_WANTED = 7  # Low jam distance
-        vehicle_type.COMFORT_ACC_MAX = 6
-        vehicle_type.COMFORT_ACC_MIN = -3
-
-        # Random vehicles
-        simulation_steps = 3
-        for t in range(n_vehicles - 1):
-            self._spawn_vehicle(np.linspace(0, 80, n_vehicles)[t])
-        for _ in range(simulation_steps):
-            [
-                (
-                    self.road.act(),
-                    self.road.step(1 / self.config["simulation_frequency"]),
-                )
-                for _ in range(self.config["simulation_frequency"])
-            ]
-
-        # Challenger vehicle
-        self._spawn_vehicle(
-            60,
-            spawn_probability=1,
-            go_straight=True,
-            position_deviation=0.1,
-            speed_deviation=0,
+        road = self.road
+        ego_vehicle = self.action_type.vehicle_class(
+            road, road.network.get_lane(("a", "b", 1)).position(30, 0), speed=10
         )
+        road.vehicles.append(ego_vehicle)
 
-        # Controlled vehicles
-        self.controlled_vehicles = []
-        for ego_id in range(0, self.config["controlled_vehicles"]):
-            ego_lane = self.road.network.get_lane(("a", "b", 1))
-            destination = self.config["destination"] or "o" + str(
-                self.np_random.integers(1, 4)
-            )
-            ego_vehicle = self.action_type.vehicle_class(
-                self.road,
-                ego_lane.position(60 + 5 * self.np_random.normal(1), 0),
-                speed=ego_lane.speed_limit,
-                heading=ego_lane.heading_at(60),
-            )
-            try:
-                ego_vehicle.plan_route_to(destination)
-                ego_vehicle.speed_index = ego_vehicle.speed_to_index(
-                    ego_lane.speed_limit
-                )
-                ego_vehicle.target_speed = ego_vehicle.index_to_speed(
-                    ego_vehicle.speed_index
-                )
-            except AttributeError:
-                pass
+        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
 
-            self.road.vehicles.append(ego_vehicle)
-            self.controlled_vehicles.append(ego_vehicle)
-            for v in self.road.vehicles:  # Prevent early collisions
-                if (
-                    v is not ego_vehicle
-                    and np.linalg.norm(v.position - ego_vehicle.position) < 20
-                ):
-                    self.road.vehicles.remove(v)
-
-    def _spawn_vehicle(
-        self,
-        longitudinal: float = 0,
-        position_deviation: float = 1.0,
-        speed_deviation: float = 1.0,
-        spawn_probability: float = 0.6,
-        go_straight: bool = False,
-    ) -> None:
-        if self.np_random.uniform() > spawn_probability:
-            return
-
-        route = self.np_random.choice(range(4), size=2, replace=False)
-        route[1] = (route[0] + 2) % 4 if go_straight else route[1]
-        vehicle_type = utils.class_from_path(self.config["other_vehicles_type"])
-        vehicle = vehicle_type.make_on_lane(
-            self.road,
-            ("o" + str(route[0]), "ir" + str(route[0]), 0),
-            longitudinal=(
-                longitudinal + 5 + self.np_random.normal() * position_deviation
-            ),
-            speed=8 + self.np_random.normal() * speed_deviation,
-        )
-        for v in self.road.vehicles:
-            if np.linalg.norm(v.position - vehicle.position) < 15:
-                return
-        vehicle.plan_route_to("o" + str(route[1]))
-        vehicle.randomize_behavior()
-        self.road.vehicles.append(vehicle)
-        return vehicle
-
-    def _clear_vehicles(self) -> None:
-        is_leaving = (
-            lambda vehicle: "il" in vehicle.lane_index[0]
-            and "o" in vehicle.lane_index[1]
-            and vehicle.lane.local_coordinates(vehicle.position)[0]
-            >= vehicle.lane.length - 4 * vehicle.LENGTH
-        )
-        self.road.vehicles = [
-            vehicle
-            for vehicle in self.road.vehicles
-            if vehicle in self.controlled_vehicles
-            or not (is_leaving(vehicle) or vehicle.route is None)
-        ]
-
-    def has_arrived(self, vehicle: Vehicle, exit_distance: float = 25) -> bool:
-        return (
-            "il" in vehicle.lane_index[0]
-            and "o" in vehicle.lane_index[1]
-            and vehicle.lane.local_coordinates(vehicle.position)[0] >= exit_distance
-        )
+        # for position, speed in [(90, 29), (70, 31), (5, 31.5)]:
+        #     lane = road.network.get_lane(("a", "b", self.np_random.integers(2)))
+        #     position = lane.position(position + self.np_random.uniform(-5, 5), 0)
+        #     speed += self.np_random.uniform(-1, 1)
+        #     road.vehicles.append(other_vehicles_type(road, position, speed=speed))
+        #
+        # merging_v = other_vehicles_type(
+        #     road, road.network.get_lane(("m1", "m2", 0)).position(110, 0), speed=20
+        # )
+        # merging_v.target_speed = 30
+        # road.vehicles.append(merging_v)
+        self.vehicle = ego_vehicle
