@@ -11,7 +11,7 @@ from highway_env.road.lane import (
     StraightLane,
 )
 from highway_env.road.regulation import RegulatedRoad
-from highway_env.road.road import Road, RoadNetwork
+from highway_env.road.road import RoadNetwork
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.objects import Obstacle
@@ -46,7 +46,7 @@ class Highway401(AbstractEnv):
                 "screen_width": 1600,
                 "screen_height": 1600,
                 "offroad_terminal": True,
-                "destination": "o1",
+                "destination": "sxr",
             }
         )
         return config
@@ -137,246 +137,7 @@ class Highway401(AbstractEnv):
         self._make_vehicles()
 
     def _make_road(self) -> None:
-        """
-        Make an 4-way intersection.
-
-        The horizontal road has the right of way. More precisely, the levels of priority are:
-            - 3 for horizontal straight lanes and right-turns
-            - 1 for vertical straight lanes and right-turns
-            - 2 for horizontal left-turns
-            - 0 for vertical left-turns
-
-        The code for nodes in the road network is:
-        (o:outer | i:inner + [r:right, l:left]) + (0:south | 1:west | 2:north | 3:east)
-
-        :return: the intersection road
-        """
-        lane_width = AbstractLane.DEFAULT_WIDTH
-        right_turn_radius = lane_width + 5  # [m}
-        left_turn_radius = right_turn_radius + lane_width  # [m}
-        outer_distance = right_turn_radius + lane_width / 2
-        access_length = 50 + 50  # [m]
-
         net = RoadNetwork()
-        n, c, s = LineType.NONE, LineType.CONTINUOUS, LineType.STRIPED
-
-        # # Straight line
-        # net.add_lane(
-        #     "a",
-        #     "b",
-        #     StraightLane(
-        #         [-300, 130],
-        #         [-22, 130],
-        #         line_types=(LineType.CONTINUOUS, LineType.STRIPED),
-        #         speed_limit=10,
-        #     ),
-        # )
-        #
-        # net.add_lane(
-        #     "a",
-        #     "b",
-        #     StraightLane(
-        #         [-300, 130 + lane_width],
-        #         [-170, 130 + lane_width],
-        #         line_types=(LineType.STRIPED, LineType.CONTINUOUS),
-        #         speed_limit=10,
-        #     ),
-        # )
-        # net.add_lane(
-        #     "a",
-        #     "b",
-        #     StraightLane(
-        #         [-170, 130 + lane_width],
-        #         [-100, 130 + lane_width],
-        #         line_types=(LineType.NONE, LineType.STRIPED),
-        #         speed_limit=10,
-        #     ),
-        # )
-        #
-        # net.add_lane(
-        #     "a",
-        #     "b",
-        #     StraightLane(
-        #         [-100, 130 + lane_width],
-        #         [-22, 130 + lane_width],
-        #         line_types=(LineType.NONE, LineType.CONTINUOUS),
-        #         speed_limit=10,
-        #     ),
-        # )
-        #
-        # # merging
-        # amplitude = 6
-        # ljk = StraightLane([-300, 150], [-250, 150], line_types=(c, c), forbidden=True)
-        # lkf = SineLane(
-        #     [-250, 144],
-        #     [-200, 144],
-        #     amplitude,
-        #     2 * np.pi / (2 * -50),
-        #     np.pi / 2,
-        #     line_types=[c, c],
-        #     forbidden=True,
-        # )
-        # net.add_lane(
-        #     "f",
-        #     "b",
-        #     StraightLane(
-        #         [-200, 130 + lane_width * 2],
-        #         [-100, 130 + lane_width * 2],
-        #         line_types=(LineType.NONE, LineType.CONTINUOUS),
-        #         speed_limit=10,
-        #         forbidden=True,
-        #     ),
-        # )
-        #
-        # net.add_lane("j", "k", ljk)
-        # net.add_lane("k", "f", lkf)
-        #
-        # # # 2 - Circular Arc #1
-        # center1 = [-22, 110]
-        # radii1 = 20
-        # net.add_lane(
-        #     "b",
-        #     "c",
-        #     CircularLane(
-        #         center1,
-        #         radii1,
-        #         np.deg2rad(90),
-        #         np.deg2rad(-1),
-        #         clockwise=False,
-        #         line_types=(LineType.CONTINUOUS, LineType.NONE),
-        #         speed_limit=10,
-        #     ),
-        # )
-        #
-        # net.add_lane(
-        #     "b",
-        #     "c",
-        #     CircularLane(
-        #         center1,
-        #         radii1 + 4,
-        #         np.deg2rad(90),
-        #         np.deg2rad(-1),
-        #         clockwise=False,
-        #         line_types=(LineType.STRIPED, LineType.CONTINUOUS),
-        #         speed_limit=10,
-        #     ),
-        # )
-        #
-        # for corner in range(4):
-        #     angle = np.radians(90 * corner)
-        #     is_horizontal = corner % 2
-        #     priority = 3 if is_horizontal else 1
-        #     rotation = np.array(
-        #         [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
-        #     )
-        #     # Incoming
-        #     start = rotation @ np.array(
-        #         [lane_width / 2, access_length + outer_distance]
-        #     )
-        #     end = rotation @ np.array([lane_width / 2, outer_distance])
-        #     net.add_lane(
-        #         "o" + str(corner),
-        #         "ir" + str(corner),
-        #         StraightLane(
-        #             start,
-        #             end,
-        #             line_types=[s, c],
-        #             priority=priority,
-        #             speed_limit=10,
-        #         ),
-        #     )
-        #     # Right turn
-        #     r_center = rotation @ (np.array([outer_distance, outer_distance]))
-        #     net.add_lane(
-        #         "ir" + str(corner),
-        #         "il" + str((corner - 1) % 4),
-        #         CircularLane(
-        #             r_center,
-        #             right_turn_radius,
-        #             angle + np.radians(180),
-        #             angle + np.radians(270),
-        #             line_types=[n, c],
-        #             priority=priority,
-        #             speed_limit=10,
-        #         ),
-        #     )
-        #     # Left turn
-        #     l_center = rotation @ (
-        #         np.array(
-        #             [
-        #                 -left_turn_radius + lane_width / 2,
-        #                 left_turn_radius - lane_width / 2,
-        #             ]
-        #         )
-        #     )
-        #     net.add_lane(
-        #         "ir" + str(corner),
-        #         "il" + str((corner + 1) % 4),
-        #         CircularLane(
-        #             l_center,
-        #             left_turn_radius,
-        #             angle + np.radians(0),
-        #             angle + np.radians(-90),
-        #             clockwise=False,
-        #             line_types=[n, n],
-        #             priority=priority - 1,
-        #             speed_limit=10,
-        #         ),
-        #     )
-        #     # Straight
-        #     start = rotation @ np.array([lane_width / 2, outer_distance])
-        #     end = rotation @ np.array([lane_width / 2, -outer_distance])
-        #     net.add_lane(
-        #         "ir" + str(corner),
-        #         "il" + str((corner + 2) % 4),
-        #         StraightLane(
-        #             start, end, line_types=[s, n], priority=priority, speed_limit=10
-        #         ),
-        #     )
-        #     # Exit
-        #     start = rotation @ np.flip(
-        #         [lane_width / 2, access_length + outer_distance], axis=0
-        #     )
-        #     end = rotation @ np.flip([lane_width / 2, outer_distance], axis=0)
-        #     net.add_lane(
-        #         "il" + str((corner - 1) % 4),
-        #         "o" + str((corner - 1) % 4),
-        #         StraightLane(
-        #             end, start, line_types=[n, c], priority=priority, speed_limit=10
-        #         ),
-        #     )
-        #
-        # dev = 20 # [m]
-        # a = 5  # [m]
-        # delta_st = 0.2 * dev  # [m]
-        # w = 2 * np.pi / 5
-        # delta_en = dev - delta_st
-        # # enter to roundabout
-        # net.add_lane(
-        #     "il1",
-        #     "ee",
-        #     SineLane(
-        #         [-111, -6],
-        #         [-121, -6],
-        #         4,
-        #         w,
-        #         -np.pi / 2,
-        #         line_types=(c, c),
-        #     ),
-        # )
-        # net.add_lane(
-        #     "ex",
-        #     "o1",
-        #     SineLane(
-        #         [-120, 6],
-        #         [-111, 6],
-        #         4,
-        #         w,
-        #         18.6,
-        #         line_types=(c, c),
-        #     ),
-        # )
-        # self._add_roundabout(net)
 
         road = RegulatedRoad(
             network=net,
@@ -384,20 +145,22 @@ class Highway401(AbstractEnv):
             record_history=self.config["show_trajectories"],
         )
 
+        self._add_intersection_to_road(road, 0, 0)
+
         lane_h_end, lane_v_end = self._add_straight_highway_with_merging(road)
 
-        lane_h_end, lane_v_end = self._add_road_to_enter_intersection(road, lane_h_end)
-
-        lane_h_end, lane_v_end = self._add_intersection_to_road(
+        lane_h_end, lane_v_end = self._add_road_to_enter_intersection(
             road, lane_h_end, lane_v_end
         )
+
+        self._add_roundabout(road, lane_h_end, lane_v_end)
 
         self.road = road
 
     @staticmethod
     def _add_straight_highway_with_merging(road: RegulatedRoad) -> Tuple[int, int]:
         net = road.network
-        lane_star = 0
+        lane_star = [-411, 129]
         merging_line_vertical_distance = 15
         lane_width = AbstractLane.DEFAULT_WIDTH
         line_length = 150
@@ -408,15 +171,15 @@ class Highway401(AbstractEnv):
 
         # ab1 straight line 0
         ab_0 = StraightLane(
-            [lane_star, lane_star],
-            [line_length, lane_star],
+            [lane_star[0], lane_star[1]],
+            [lane_star[0] + line_length, lane_star[1]],
             line_types=(LineType.CONTINUOUS, LineType.STRIPED),
         )
         net.add_lane("a", "b", ab_0)
 
         ab_1 = StraightLane(
-            [lane_star, lane_star + lane_width],
-            [line_length, lane_star + lane_width],
+            [lane_star[0], lane_star[1] + lane_width],
+            [lane_star[0] + line_length, lane_star[1] + lane_width],
             line_types=(LineType.NONE, LineType.CONTINUOUS),
         )
         # ab1 straight line 1
@@ -428,8 +191,11 @@ class Highway401(AbstractEnv):
 
         # m1 straight merging line
         m12 = StraightLane(
-            [lane_star, merging_line_vertical_distance],
-            [merging_straight_line_length, merging_line_vertical_distance],
+            [lane_star[0], lane_star[1] + merging_line_vertical_distance],
+            [
+                lane_star[0] + merging_straight_line_length,
+                lane_star[1] + merging_line_vertical_distance,
+            ],
             line_types=(LineType.CONTINUOUS, LineType.CONTINUOUS),
             forbidden=True,
         )
@@ -442,8 +208,14 @@ class Highway401(AbstractEnv):
         # m2 sin merging line to b
         m23_end = merging_straight_line_length + merging_sine_line_length
         m23 = SineLane(
-            [merging_straight_line_length, merging_line_vertical_distance - amplitude],
-            [m23_end, merging_line_vertical_distance - amplitude],
+            [
+                lane_star[0] + merging_straight_line_length,
+                merging_line_vertical_distance - amplitude + lane_star[1],
+            ],
+            [
+                lane_star[0] + m23_end,
+                merging_line_vertical_distance - amplitude + lane_star[1],
+            ],
             amplitude,
             2 * np.pi / (2 * -50),
             np.pi / 2,
@@ -455,8 +227,8 @@ class Highway401(AbstractEnv):
         # bc straight merging line 2
         merging_line_end = m23_end + merging_straight_line2_length
         m34 = StraightLane(
-            [m23_end, lane_star + 2 * lane_width],
-            [merging_line_end, lane_star + 2 * lane_width],
+            [lane_star[0] + m23_end, 2 * lane_width + lane_star[1]],
+            [lane_star[0] + merging_line_end, 2 * lane_width + lane_star[1]],
             line_types=(LineType.NONE, LineType.CONTINUOUS),
             forbidden=True,
         )
@@ -464,15 +236,15 @@ class Highway401(AbstractEnv):
 
         # bc straight line 0
         bc_0 = StraightLane(
-            [line_length, lane_star],
-            [merging_line_end, lane_star],
+            [lane_star[0] + line_length, lane_star[1]],
+            [lane_star[0] + merging_line_end, lane_star[1]],
             line_types=(LineType.CONTINUOUS, LineType.STRIPED),
         )
         net.add_lane("b", "c", bc_0)
 
         bc_1 = StraightLane(
-            [lane_star, lane_star + lane_width],
-            [merging_line_end, lane_star + lane_width],
+            [lane_star[0], lane_star[1] + lane_width],
+            [lane_star[0] + merging_line_end, lane_star[1] + lane_width],
             line_types=(LineType.NONE, LineType.STRIPED),
         )
         # bc straight line 1
@@ -484,14 +256,14 @@ class Highway401(AbstractEnv):
 
         # cd straight line 0
         cd_0 = StraightLane(
-            [merging_line_end, lane_star],
-            [merging_line_end + line_length, lane_star],
+            [lane_star[0] + merging_line_end, lane_star[1]],
+            [lane_star[0] + merging_line_end + line_length, lane_star[1]],
             line_types=(LineType.CONTINUOUS, LineType.STRIPED),
             speed_limit=10,
         )
         cd_1 = StraightLane(
-            [merging_line_end, lane_star + lane_width],
-            [merging_line_end + line_length, lane_star + lane_width],
+            [lane_star[0] + merging_line_end, lane_star[1] + lane_width],
+            [lane_star[0] + merging_line_end + line_length, lane_star[1] + lane_width],
             line_types=(LineType.NONE, LineType.CONTINUOUS),
             speed_limit=10,
         )
@@ -502,21 +274,27 @@ class Highway401(AbstractEnv):
         road.objects.append(
             Obstacle(
                 road,
-                [m23_end + merging_straight_line2_length, lane_star + 2 * lane_width],
+                [
+                    lane_star[0] + m23_end + merging_straight_line2_length,
+                    lane_star[1] + 2 * lane_width,
+                ],
             )
         )
-        return merging_line_end + line_length, int(lane_star + lane_width)
+        return lane_star[0] + merging_line_end + line_length, int(
+            lane_star[1] + lane_width
+        )
 
     @staticmethod
-    def _add_road_to_enter_intersection(road: RegulatedRoad, h_start: int):
+    def _add_road_to_enter_intersection(
+        road: RegulatedRoad, h_start: int, v_start: int
+    ):
         net = road.network
-        lane_length = 20
         lane_width = AbstractLane.DEFAULT_WIDTH
         radii1 = 20
-        center1 = [h_start, -radii1]
+        center1 = [h_start, v_start - radii1 - lane_width]
         net.add_lane(
             "d",
-            "o2",
+            "o0",
             CircularLane(
                 center1,
                 radii1,
@@ -529,7 +307,7 @@ class Highway401(AbstractEnv):
         )
         net.add_lane(
             "d",
-            "o2",
+            "o0",
             CircularLane(
                 center1,
                 radii1 + lane_width,
@@ -542,7 +320,7 @@ class Highway401(AbstractEnv):
         )
 
         h_end = h_start + radii1
-        v_end = -radii1 - 11
+        v_end = v_start - radii1 - 11
 
         road.network = net
         return h_end, v_end
@@ -561,12 +339,12 @@ class Highway401(AbstractEnv):
         """
         net = road.network
         lane_width = AbstractLane.DEFAULT_WIDTH
-        n, c, s = LineType.NONE, LineType.CONTINUOUS, LineType.STRIPED
         right_turn_radius = lane_width + 5  # [m}
         left_turn_radius = right_turn_radius + lane_width  # [m}
-        outer_distance = right_turn_radius + lane_width
-        access_lane_length = 50 + 50  # [m]
+        outer_distance = right_turn_radius + lane_width / 2
+        access_length = 50 + 50  # [m]
 
+        n, c, s = LineType.NONE, LineType.CONTINUOUS, LineType.STRIPED
         for corner in range(4):
             angle = np.radians(90 * corner)
             is_horizontal = corner % 2
@@ -574,32 +352,11 @@ class Highway401(AbstractEnv):
             rotation = np.array(
                 [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
             )
-
             # Incoming
             start = rotation @ np.array(
-                [-lane_width, access_lane_length + outer_distance]
+                [lane_width / 2, access_length + outer_distance]
             )
-            start[0] += h_start
-
-            start[1] = v_start - start[1] - access_lane_length
-
-            end = rotation @ np.array([-lane_width, outer_distance])
-
-            end[0] += h_start
-            end[1] = v_start - end[1] - access_lane_length
-
-            if corner == 0:
-                start[0] += lane_width
-                end[0] += lane_width
-                start[1] += lane_width
-                end[1] += lane_width
-            elif corner == 3:
-                start[1] += lane_width
-                end[1] += lane_width
-            elif corner == 1:
-                start[0] += lane_width
-                end[0] += lane_width
-
+            end = rotation @ np.array([lane_width / 2, outer_distance])
             net.add_lane(
                 "o" + str(corner),
                 "ir" + str(corner),
@@ -609,17 +366,6 @@ class Highway401(AbstractEnv):
             )
             # Right turn
             r_center = rotation @ (np.array([outer_distance, outer_distance]))
-            r_center[0] += h_start
-            r_center[1] = v_start + r_center[1] - access_lane_length
-
-            if corner == 2:
-                r_center[0] += lane_width
-                r_center[1] += lane_width
-            elif corner == 3:
-                r_center[1] += lane_width
-            elif corner == 1:
-                r_center[0] += lane_width
-
             net.add_lane(
                 "ir" + str(corner),
                 "il" + str((corner - 1) % 4),
@@ -637,24 +383,11 @@ class Highway401(AbstractEnv):
             l_center = rotation @ (
                 np.array(
                     [
-                        -left_turn_radius + lane_width,
-                        left_turn_radius - lane_width,
+                        -left_turn_radius + lane_width / 2,
+                        left_turn_radius - lane_width / 2,
                     ]
                 )
             )
-            l_center[0] += h_start
-            l_center[1] = v_start + l_center[1] - access_lane_length
-
-            if corner == 0:
-                l_center[1] += lane_width
-            elif corner == 1:
-                l_center[1] -= lane_width
-            elif corner == 2:
-                l_center[0] += lane_width
-            elif corner == 3:
-                l_center[0] += lane_width
-                l_center[1] += lane_width
-
             net.add_lane(
                 "ir" + str(corner),
                 "il" + str((corner + 1) % 4),
@@ -669,27 +402,9 @@ class Highway401(AbstractEnv):
                     speed_limit=10,
                 ),
             )
-
             # Straight
-
-            start = rotation @ np.array([0, outer_distance])
-            start[0] += h_start
-            start[1] = v_start - start[1] - access_lane_length
-
-            end = rotation @ np.array([0, -outer_distance])
-            end[0] += h_start
-            end[1] = v_start - end[1] - access_lane_length
-
-            if corner == 0:
-                start[1] += lane_width
-                end[1] += lane_width
-            elif corner == 2:
-                start[0] += lane_width
-                end[0] += lane_width
-            elif corner == 1:
-                start[1] += lane_width
-                end[1] += lane_width
-
+            start = rotation @ np.array([lane_width / 2, outer_distance])
+            end = rotation @ np.array([lane_width / 2, -outer_distance])
             net.add_lane(
                 "ir" + str(corner),
                 "il" + str((corner + 2) % 4),
@@ -697,30 +412,11 @@ class Highway401(AbstractEnv):
                     start, end, line_types=[s, n], priority=priority, speed_limit=10
                 ),
             )
-
             # Exit
             start = rotation @ np.flip(
-                [-lane_width, access_lane_length + outer_distance], axis=0
+                [lane_width / 2, access_length + outer_distance], axis=0
             )
-            start[0] += h_start
-            start[1] = v_start - start[1] - access_lane_length
-
-            end = rotation @ np.flip([-lane_width, outer_distance], axis=0)
-            end[0] += h_start
-            end[1] = v_start - end[1] - access_lane_length
-
-            if corner == 3:
-                start[0] += lane_width
-                end[0] += lane_width
-            elif corner == 1:
-                start[1] += lane_width
-                end[1] += lane_width
-            elif corner == 2:
-                start[1] += lane_width
-                end[1] += lane_width
-                start[0] += lane_width
-                end[0] += lane_width
-
+            end = rotation @ np.flip([lane_width / 2, outer_distance], axis=0)
             net.add_lane(
                 "il" + str((corner - 1) % 4),
                 "o" + str((corner - 1) % 4),
@@ -732,8 +428,12 @@ class Highway401(AbstractEnv):
         road.network = net
         return 0, 0
 
-    def _add_roundabout(self, net: RoadNetwork):
-        center = [-145, 0]  # [m]
+    def _add_roundabout(
+        self, road: RegulatedRoad, h_start: int, v_start: int
+    ) -> Tuple[int, int]:
+        net = road.network
+        # Circle lanes: (s)outh/(e)ast/(n)orth/(w)est (e)ntry/e(x)it.
+        center = [-250, 0]  # [m]
         radius = 20  # [m]
         alpha = 24  # [deg]
 
@@ -838,6 +538,104 @@ class Highway401(AbstractEnv):
                 ),
             )
 
+        # Access lanes: (r)oad/(s)ine
+        access = 150  # [m]
+        dev = 85  # [m]
+        a = 5  # [m]
+        delta_st = 0.2 * dev  # [m]
+
+        delta_en = dev - delta_st
+        w = 2 * np.pi / dev
+
+        # O
+        # |
+        # v
+        net.add_lane(
+            "ser",
+            "ses",
+            StraightLane(
+                [center[0] + 2, access - 50],
+                [center[0] + 2, dev / 2],
+                line_types=(s, c),
+            ),
+        )
+        net.add_lane(
+            "ses",
+            "se",
+            SineLane(
+                [center[0] + 2 + a, dev / 2],
+                [center[0] + 2 + a, dev / 2 - delta_st],
+                a,
+                w,
+                -np.pi / 2,
+                line_types=(c, c),
+            ),
+        )
+        net.add_lane(
+            "sx",
+            "sxs",
+            SineLane(
+                [center[0] - 2 - a, -dev / 2 + delta_en],
+                [center[0] - 2 - a, dev / 2],
+                a,
+                w,
+                -np.pi / 2 + w * delta_en,
+                line_types=(c, c),
+            ),
+        )
+        net.add_lane(
+            "sxs",
+            "sxr",
+            StraightLane(
+                [center[0] - 2, dev / 2],
+                [center[0] - 2, access - 50],
+                line_types=(n, c),
+            ),
+        )
+
+        # O <---
+        net.add_lane(
+            "o1",
+            "ees",
+            StraightLane(
+                [center[0] + access, -2], [center[0] + dev / 2, -2], line_types=(s, c)
+            ),
+        )
+        net.add_lane(
+            "ees",
+            "ee",
+            SineLane(
+                [center[0] + dev / 2, -2 - a],
+                [center[0] + dev / 2 - delta_st, -2 - a],
+                a,
+                w,
+                -np.pi / 2,
+                line_types=(c, c),
+            ),
+        )
+        net.add_lane(
+            "ex",
+            "exs",
+            SineLane(
+                [center[0] + -dev / 2 + delta_en, 2 + a],
+                [center[0] + dev / 2, 2 + a],
+                a,
+                w,
+                -np.pi / 2 + w * delta_en,
+                line_types=(c, c),
+            ),
+        )
+        net.add_lane(
+            "exs",
+            "exr",
+            StraightLane(
+                [center[0] + dev / 2, 2], [center[0] + access, 2], line_types=(n, c)
+            ),
+        )
+
+        road.network = net
+        return 0, 0
+
     def _make_vehicles(self) -> None:
         """
         Populate a road with several vehicles on the highway and on the merging lane, as well as an ego-vehicle.
@@ -857,14 +655,14 @@ class Highway401(AbstractEnv):
         self.controlled_vehicles.append(ego_vehicle)
         road.vehicles.append(ego_vehicle)
 
-        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
-
-        # for position, speed in [(90, 29), (70, 31), (5, 31.5)]:
-        #     lane = road.network.get_lane(("a", "b", self.np_random.integers(2)))
+        # other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+        #
+        # for position, speed in [(40, 29)]:
+        #     lane = road.network.get_lane(("a", "b", 1))
         #     position = lane.position(position + self.np_random.uniform(-5, 5), 0)
         #     speed += self.np_random.uniform(-1, 1)
         #     road.vehicles.append(other_vehicles_type(road, position, speed=speed))
-        #
+
         # merging_v = other_vehicles_type(
         #     road, road.network.get_lane(("m1", "m2", 0)).position(110, 0), speed=20
         # )
