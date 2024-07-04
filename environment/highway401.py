@@ -43,9 +43,10 @@ class Highway401(AbstractEnv):
                 "reward_speed_range": [5, 30],
                 "merging_speed_reward": -0.5,
                 "lane_change_reward": -0.05,
-                "screen_width": 600,
-                "screen_height": 600,
+                "screen_width": 1600,
+                "screen_height": 1600,
                 "offroad_terminal": True,
+                "destination": "o1",
             }
         )
         return config
@@ -384,7 +385,12 @@ class Highway401(AbstractEnv):
         )
 
         lane_h_end, lane_v_end = self._add_straight_highway_with_merging(road)
-        self._add_road_to_enter_intersection(road, lane_h_end)
+
+        lane_h_end, lane_v_end = self._add_road_to_enter_intersection(road, lane_h_end)
+
+        lane_h_end, lane_v_end = self._add_intersection_to_road(
+            road, lane_h_end, lane_v_end
+        )
 
         self.road = road
 
@@ -510,7 +516,7 @@ class Highway401(AbstractEnv):
         center1 = [h_start, -radii1]
         net.add_lane(
             "d",
-            "e",
+            "o2",
             CircularLane(
                 center1,
                 radii1,
@@ -523,7 +529,7 @@ class Highway401(AbstractEnv):
         )
         net.add_lane(
             "d",
-            "e",
+            "o2",
             CircularLane(
                 center1,
                 radii1 + lane_width,
@@ -536,34 +542,195 @@ class Highway401(AbstractEnv):
         )
 
         h_end = h_start + radii1
-        v_end = -radii1 - lane_length
+        v_end = -radii1 - 11
 
-        net.add_lane(
-            "e",
-            "f",
-            StraightLane(
-                [h_end, -radii1],
-                [h_end, v_end],
-                line_types=[LineType.CONTINUOUS, LineType.STRIPED],
-                speed_limit=10,
-            ),
-        )
-        net.add_lane(
-            "e",
-            "f",
-            StraightLane(
-                [h_end + lane_width, -radii1],
-                [h_end + lane_width, v_end],
-                line_types=[LineType.NONE, LineType.CONTINUOUS],
-                speed_limit=10,
-            ),
-        )
         road.network = net
         return h_end, v_end
 
     def _add_intersection_to_road(
         self, road: RegulatedRoad, h_start: int, v_start: int
-    ): ...
+    ) -> Tuple[int, int]:
+        """
+               K
+               |
+        h------j--------i
+              |
+              g
+              |
+              f
+        """
+        net = road.network
+        lane_width = AbstractLane.DEFAULT_WIDTH
+        n, c, s = LineType.NONE, LineType.CONTINUOUS, LineType.STRIPED
+        right_turn_radius = lane_width + 5  # [m}
+        left_turn_radius = right_turn_radius + lane_width  # [m}
+        outer_distance = right_turn_radius + lane_width
+        access_lane_length = 50 + 50  # [m]
+
+        for corner in range(4):
+            angle = np.radians(90 * corner)
+            is_horizontal = corner % 2
+            priority = 3 if is_horizontal else 1
+            rotation = np.array(
+                [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+            )
+
+            # Incoming
+            start = rotation @ np.array(
+                [-lane_width, access_lane_length + outer_distance]
+            )
+            start[0] += h_start
+
+            start[1] = v_start - start[1] - access_lane_length
+
+            end = rotation @ np.array([-lane_width, outer_distance])
+
+            end[0] += h_start
+            end[1] = v_start - end[1] - access_lane_length
+
+            if corner == 0:
+                start[0] += lane_width
+                end[0] += lane_width
+                start[1] += lane_width
+                end[1] += lane_width
+            elif corner == 3:
+                start[1] += lane_width
+                end[1] += lane_width
+            elif corner == 1:
+                start[0] += lane_width
+                end[0] += lane_width
+
+            net.add_lane(
+                "o" + str(corner),
+                "ir" + str(corner),
+                StraightLane(
+                    start, end, line_types=[s, c], priority=priority, speed_limit=10
+                ),
+            )
+            # Right turn
+            r_center = rotation @ (np.array([outer_distance, outer_distance]))
+            r_center[0] += h_start
+            r_center[1] = v_start + r_center[1] - access_lane_length
+
+            if corner == 2:
+                r_center[0] += lane_width
+                r_center[1] += lane_width
+            elif corner == 3:
+                r_center[1] += lane_width
+            elif corner == 1:
+                r_center[0] += lane_width
+
+            net.add_lane(
+                "ir" + str(corner),
+                "il" + str((corner - 1) % 4),
+                CircularLane(
+                    r_center,
+                    right_turn_radius,
+                    angle + np.radians(180),
+                    angle + np.radians(270),
+                    line_types=[n, c],
+                    priority=priority,
+                    speed_limit=10,
+                ),
+            )
+            # Left turn
+            l_center = rotation @ (
+                np.array(
+                    [
+                        -left_turn_radius + lane_width,
+                        left_turn_radius - lane_width,
+                    ]
+                )
+            )
+            l_center[0] += h_start
+            l_center[1] = v_start + l_center[1] - access_lane_length
+
+            if corner == 0:
+                l_center[1] += lane_width
+            elif corner == 1:
+                l_center[1] -= lane_width
+            elif corner == 2:
+                l_center[0] += lane_width
+            elif corner == 3:
+                l_center[0] += lane_width
+                l_center[1] += lane_width
+
+            net.add_lane(
+                "ir" + str(corner),
+                "il" + str((corner + 1) % 4),
+                CircularLane(
+                    l_center,
+                    left_turn_radius,
+                    angle + np.radians(0),
+                    angle + np.radians(-90),
+                    clockwise=False,
+                    line_types=[n, n],
+                    priority=priority - 1,
+                    speed_limit=10,
+                ),
+            )
+
+            # Straight
+
+            start = rotation @ np.array([0, outer_distance])
+            start[0] += h_start
+            start[1] = v_start - start[1] - access_lane_length
+
+            end = rotation @ np.array([0, -outer_distance])
+            end[0] += h_start
+            end[1] = v_start - end[1] - access_lane_length
+
+            if corner == 0:
+                start[1] += lane_width
+                end[1] += lane_width
+            elif corner == 2:
+                start[0] += lane_width
+                end[0] += lane_width
+            elif corner == 1:
+                start[1] += lane_width
+                end[1] += lane_width
+
+            net.add_lane(
+                "ir" + str(corner),
+                "il" + str((corner + 2) % 4),
+                StraightLane(
+                    start, end, line_types=[s, n], priority=priority, speed_limit=10
+                ),
+            )
+
+            # Exit
+            start = rotation @ np.flip(
+                [-lane_width, access_lane_length + outer_distance], axis=0
+            )
+            start[0] += h_start
+            start[1] = v_start - start[1] - access_lane_length
+
+            end = rotation @ np.flip([-lane_width, outer_distance], axis=0)
+            end[0] += h_start
+            end[1] = v_start - end[1] - access_lane_length
+
+            if corner == 3:
+                start[0] += lane_width
+                end[0] += lane_width
+            elif corner == 1:
+                start[1] += lane_width
+                end[1] += lane_width
+            elif corner == 2:
+                start[1] += lane_width
+                end[1] += lane_width
+                start[0] += lane_width
+                end[0] += lane_width
+
+            net.add_lane(
+                "il" + str((corner - 1) % 4),
+                "o" + str((corner - 1) % 4),
+                StraightLane(
+                    end, start, line_types=[n, c], priority=priority, speed_limit=10
+                ),
+            )
+
+        road.network = net
+        return 0, 0
 
     def _add_roundabout(self, net: RoadNetwork):
         center = [-145, 0]  # [m]
@@ -678,9 +845,16 @@ class Highway401(AbstractEnv):
         :return: the ego-vehicle
         """
         road = self.road
+
         ego_vehicle = self.action_type.vehicle_class(
             road, road.network.get_lane(("a", "b", 1)).position(30, 0), speed=10
         )
+        destination = self.config["destination"] or "o" + str(
+            self.np_random.integers(1, 4)
+        )
+        ego_vehicle.plan_route_to(destination)
+
+        self.controlled_vehicles.append(ego_vehicle)
         road.vehicles.append(ego_vehicle)
 
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
