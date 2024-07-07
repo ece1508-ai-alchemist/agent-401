@@ -1,4 +1,4 @@
-from typing import Dict, Text, Tuple
+from typing import Dict, List, Text, Tuple
 
 import numpy as np
 from highway_env import utils
@@ -16,6 +16,59 @@ from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.objects import Obstacle
 
+LaneIndex = Tuple[str, str, int]
+Route = List[LaneIndex]
+
+
+class RoadNetwork401(RoadNetwork):
+    def position_heading_along_route(
+        self,
+        route: Route,
+        longitudinal: float,
+        lateral: float,
+        current_lane_index: LaneIndex,
+    ) -> Tuple[np.ndarray, float]:
+        """
+        Get the absolute position and heading along a route composed of several lanes at some local coordinates.
+
+        :param route: a planned route, list of lane indexes
+        :param longitudinal: longitudinal position
+        :param lateral: : lateral position
+        :param current_lane_index: current lane index of the vehicle
+        :return: position, heading
+        """
+
+        def _get_route_head_with_id(route_):
+            lane_index_ = route_[0]
+            if lane_index_[2] is None:
+                # We know which road segment will be followed by the vehicle, but not which lane.
+                # Hypothesis: the vehicle will keep the same lane_id as the current one.
+                if len(self.graph[lane_index_[0]][lane_index_[1]]) == 1:
+                    id_ = 0
+                elif len(self.graph[lane_index_[0]][lane_index_[1]]) < len(
+                    self.graph[current_lane_index[0]][current_lane_index[1]]
+                ):
+                    id_ = len(self.graph[lane_index_[0]][lane_index_[1]]) - 1
+                else:
+                    id_ = (
+                        current_lane_index[2]
+                        if current_lane_index[2]
+                        < len(self.graph[current_lane_index[0]][current_lane_index[1]])
+                        else 0
+                    )
+                lane_index_ = (lane_index_[0], lane_index_[1], id_)
+            return lane_index_
+
+        lane_index = _get_route_head_with_id(route)
+        while len(route) > 1 and longitudinal > self.get_lane(lane_index).length:
+            longitudinal -= self.get_lane(lane_index).length
+            route = route[1:]
+            lane_index = _get_route_head_with_id(route)
+
+        return self.get_lane(lane_index).position(longitudinal, lateral), self.get_lane(
+            lane_index
+        ).heading_at(longitudinal)
+
 
 class Highway401(AbstractEnv):
     """
@@ -26,7 +79,7 @@ class Highway401(AbstractEnv):
     roundabout-----intersection------
       |              |
       |              |
-      \             /
+                    /
         -----------
              /
         -----
@@ -37,16 +90,28 @@ class Highway401(AbstractEnv):
         config = super().default_config()
         config.update(
             {
+                "action": {"type": "ContinuousAction"},
                 "collision_reward": -1,
                 "right_lane_reward": 0.1,
                 "high_speed_reward": 0.2,
-                "reward_speed_range": [5, 30],
+                "reward_speed_range": [20, 30],
                 "merging_speed_reward": -0.5,
                 "lane_change_reward": -0.05,
-                "screen_width": 1600,
-                "screen_height": 1600,
+                "screen_width": 600,
+                "screen_height": 600,
                 "offroad_terminal": True,
                 "destination": "sxr",
+                "other_vehicles_destinations": [
+                    "o1",
+                    "o2",
+                    "sxs",
+                    "sxr",
+                    "exs",
+                    "exr",
+                    "nxs",
+                    "nxr",
+                ],
+                "spawn_probability": 0.3,
             }
         )
         return config
@@ -81,7 +146,7 @@ class Highway401(AbstractEnv):
             "collision_reward": self.vehicle.crashed,
             "right_lane_reward": self.vehicle.lane_index[2] / 1,
             "high_speed_reward": scaled_speed,
-            "lane_change_reward": action in [0, 2],
+            # "lane_change_reward": action in [0, 2],
             "merging_speed_reward": sum(  # Altruistic penalty
                 (vehicle.target_speed - vehicle.speed) / vehicle.target_speed
                 for vehicle in self.road.vehicles
@@ -137,7 +202,7 @@ class Highway401(AbstractEnv):
         self._make_vehicles()
 
     def _make_road(self) -> None:
-        net = RoadNetwork()
+        net = RoadNetwork401()
 
         road = RegulatedRoad(
             network=net,
@@ -221,18 +286,12 @@ class Highway401(AbstractEnv):
             np.pi / 2,
             line_types=[LineType.CONTINUOUS, LineType.CONTINUOUS],
             forbidden=True,
+            priority=3,
         )
         net.add_lane("m2", "b", m23)
 
         # bc straight merging line 2
         merging_line_end = m23_end + merging_straight_line2_length
-        m34 = StraightLane(
-            [lane_star[0] + m23_end, 2 * lane_width + lane_star[1]],
-            [lane_star[0] + merging_line_end, 2 * lane_width + lane_star[1]],
-            line_types=(LineType.NONE, LineType.CONTINUOUS),
-            forbidden=True,
-        )
-        net.add_lane("b", "c", m34)
 
         # bc straight line 0
         bc_0 = StraightLane(
@@ -254,18 +313,25 @@ class Highway401(AbstractEnv):
             bc_1,
         )
 
+        m34 = StraightLane(
+            [lane_star[0] + m23_end, 2 * lane_width + lane_star[1]],
+            [lane_star[0] + merging_line_end, 2 * lane_width + lane_star[1]],
+            line_types=(LineType.NONE, LineType.CONTINUOUS),
+            forbidden=True,
+            priority=1,
+        )
+        net.add_lane("b", "c", m34)
+
         # cd straight line 0
         cd_0 = StraightLane(
             [lane_star[0] + merging_line_end, lane_star[1]],
             [lane_star[0] + merging_line_end + line_length, lane_star[1]],
             line_types=(LineType.CONTINUOUS, LineType.STRIPED),
-            speed_limit=10,
         )
         cd_1 = StraightLane(
             [lane_star[0] + merging_line_end, lane_star[1] + lane_width],
             [lane_star[0] + merging_line_end + line_length, lane_star[1] + lane_width],
             line_types=(LineType.NONE, LineType.CONTINUOUS),
-            speed_limit=10,
         )
         net.add_lane("c", "d", cd_0)
         net.add_lane("c", "d", cd_1)
@@ -302,7 +368,8 @@ class Highway401(AbstractEnv):
                 np.deg2rad(-1),
                 clockwise=False,
                 line_types=[LineType.CONTINUOUS, LineType.NONE],
-                speed_limit=10,
+                speed_limit=25,
+                priority=3,
             ),
         )
         net.add_lane(
@@ -315,7 +382,8 @@ class Highway401(AbstractEnv):
                 np.deg2rad(-1),
                 clockwise=False,
                 line_types=[LineType.STRIPED, LineType.CONTINUOUS],
-                speed_limit=10,
+                speed_limit=25,
+                priority=3,
             ),
         )
 
@@ -361,7 +429,7 @@ class Highway401(AbstractEnv):
                 "o" + str(corner),
                 "ir" + str(corner),
                 StraightLane(
-                    start, end, line_types=[s, c], priority=priority, speed_limit=10
+                    start, end, line_types=[s, c], priority=priority, speed_limit=15
                 ),
             )
             # Right turn
@@ -409,7 +477,7 @@ class Highway401(AbstractEnv):
                 "ir" + str(corner),
                 "il" + str((corner + 2) % 4),
                 StraightLane(
-                    start, end, line_types=[s, n], priority=priority, speed_limit=10
+                    start, end, line_types=[s, n], priority=priority, speed_limit=15
                 ),
             )
             # Exit
@@ -421,7 +489,7 @@ class Highway401(AbstractEnv):
                 "il" + str((corner - 1) % 4),
                 "o" + str((corner - 1) % 4),
                 StraightLane(
-                    end, start, line_types=[n, c], priority=priority, speed_limit=10
+                    end, start, line_types=[n, c], priority=priority, speed_limit=15
                 ),
             )
 
@@ -633,6 +701,45 @@ class Highway401(AbstractEnv):
             ),
         )
 
+        net.add_lane(
+            "ner",
+            "nes",
+            StraightLane(
+                [center[0] - 2, -access], [center[0] - 2, -dev / 2], line_types=(s, c)
+            ),
+        )
+        net.add_lane(
+            "nes",
+            "ne",
+            SineLane(
+                [center[0] - 2 - a, -dev / 2],
+                [center[0] - 2 - a, -dev / 2 + delta_st],
+                a,
+                w,
+                -np.pi / 2,
+                line_types=(c, c),
+            ),
+        )
+        net.add_lane(
+            "nx",
+            "nxs",
+            SineLane(
+                [center[0] + 2 + a, dev / 2 - delta_en],
+                [center[0] + 2 + a, -dev / 2],
+                a,
+                w,
+                -np.pi / 2 + w * delta_en,
+                line_types=(c, c),
+            ),
+        )
+        net.add_lane(
+            "nxs",
+            "nxr",
+            StraightLane(
+                [center[0] + 2, -dev / 2], [center[0] + 2, -access], line_types=(n, c)
+            ),
+        )
+
         road.network = net
         return 0, 0
 
@@ -645,27 +752,81 @@ class Highway401(AbstractEnv):
         road = self.road
 
         ego_vehicle = self.action_type.vehicle_class(
-            road, road.network.get_lane(("a", "b", 1)).position(30, 0), speed=10
+            road, road.network.get_lane(("m1", "m2", 0)).position(30, 0), speed=10
         )
         destination = self.config["destination"] or "o" + str(
             self.np_random.integers(1, 4)
         )
-        ego_vehicle.plan_route_to(destination)
+        # ego_vehicle.plan_route_to(destination)
 
         self.controlled_vehicles.append(ego_vehicle)
         road.vehicles.append(ego_vehicle)
 
-        # other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
-        #
-        # for position, speed in [(40, 29)]:
-        #     lane = road.network.get_lane(("a", "b", 1))
-        #     position = lane.position(position + self.np_random.uniform(-5, 5), 0)
-        #     speed += self.np_random.uniform(-1, 1)
-        #     road.vehicles.append(other_vehicles_type(road, position, speed=speed))
+        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
 
-        # merging_v = other_vehicles_type(
-        #     road, road.network.get_lane(("m1", "m2", 0)).position(110, 0), speed=20
-        # )
-        # merging_v.target_speed = 30
-        # road.vehicles.append(merging_v)
+        for position, speed in [(5, 35), (50, 25), (150, 15), (0, 30)]:
+            lane = road.network.get_lane(("a", "b", np.random.choice(range(2))))
+            position = lane.position(position + self.np_random.uniform(-5, 5), 0)
+            speed += self.np_random.uniform(-1, 1)
+            v = other_vehicles_type(road, position, speed=speed)
+            v.plan_route_to(
+                np.random.choice(self.config["other_vehicles_destinations"])
+            )
+            road.vehicles.append(v)
+
+        # Challenger vehicle
+        self._spawn_vehicle()
+
         self.vehicle = ego_vehicle
+
+    def _spawn_vehicle(
+        self,
+        longitudinal: float = 0,
+        position_deviation: float = 1.0,
+        speed_deviation: float = 1.0,
+        spawn_probability: float = 0.6,
+        go_straight: bool = False,
+    ) -> None:
+        if self.np_random.uniform() > spawn_probability:
+            return
+
+        route = self.np_random.choice(range(4), size=2, replace=False)
+        route[1] = (route[0] + 2) % 4 if go_straight else route[1]
+        vehicle_type = utils.class_from_path(self.config["other_vehicles_type"])
+        vehicle = vehicle_type.make_on_lane(
+            self.road,
+            ("o3", "ir3", 0),
+            longitudinal=(
+                longitudinal + 5 + self.np_random.normal() * position_deviation
+            ),
+            speed=8 + self.np_random.normal() * speed_deviation,
+        )
+        for v in self.road.vehicles:
+            if np.linalg.norm(v.position - vehicle.position) < 15:
+                return
+        vehicle.plan_route_to(
+            np.random.choice(self.config["other_vehicles_destinations"])
+        )
+        vehicle.randomize_behavior()
+        self.road.vehicles.append(vehicle)
+        return vehicle
+
+    def _clear_vehicles(self) -> None:
+        is_leaving = (
+            lambda vehicle: "il" in vehicle.lane_index[0]
+            and "o" in vehicle.lane_index[1]
+            and vehicle.lane.local_coordinates(vehicle.position)[0]
+            >= vehicle.lane.length - 4 * vehicle.LENGTH
+        )
+        self.road.vehicles = [
+            vehicle
+            for vehicle in self.road.vehicles
+            if vehicle in self.controlled_vehicles
+            or not (is_leaving(vehicle) or vehicle.route is None)
+        ]
+
+    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, dict]:
+        obs, reward, terminated, truncated, info = super().step(action)
+        self._clear_vehicles()
+        self._spawn_vehicle(spawn_probability=self.config["spawn_probability"])
+        return obs, reward, terminated, truncated, info
