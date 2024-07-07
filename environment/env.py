@@ -3,7 +3,7 @@ from gymnasium.envs.registration import register
 from matplotlib import pyplot as plt
 
 register(id="401-v0", entry_point="environment.highway401:Highway401")
-action_type = "DiscreteMetaAction"  # ContinuousAction or DiscreteMetaAction
+action_type = "ContinuousAction"  # ContinuousAction or DiscreteMetaAction
 env = gym.make("401-v0", render_mode="rgb_array")
 
 env.configure({"action": {"type": action_type}})

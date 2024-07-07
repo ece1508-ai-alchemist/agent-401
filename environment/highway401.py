@@ -757,7 +757,9 @@ class Highway401(AbstractEnv):
         destination = self.config["destination"] or "o" + str(
             self.np_random.integers(1, 4)
         )
-        # ego_vehicle.plan_route_to(destination)
+
+        if self.config["action"]["type"] != "ContinuousAction":
+            ego_vehicle.plan_route_to(destination)
 
         self.controlled_vehicles.append(ego_vehicle)
         road.vehicles.append(ego_vehicle)
