@@ -17,10 +17,10 @@ class QLearningAgent:
         self,
         action_space,
         state_space,
-        alpha=0.05,
+        alpha=0.1,
         gamma=0.99,
         epsilon=1.0,
-        epsilon_decay=0.999,
+        epsilon_decay=0.995,
         epsilon_min=0.1,
     ):
         self.action_space = action_space
@@ -68,9 +68,9 @@ class QLearningAgent:
         print(f"Agent loaded from {file_name}")
 
 
-def train_agent(env_sel, num_episodes=2000, save_file=None):
+def train_agent(num_episodes=2000, save_file=None):
     # Create the environment
-    env = gym.make(env_sel)
+    env = gym.make("highway-fast-v0")
     agent = QLearningAgent(env.action_space, env.observation_space)
 
     for episode in tqdm(range(num_episodes), desc="Training Progress"):
@@ -149,8 +149,7 @@ def show_video(video_folder):
 
 
 def main():
-    #"intersection-v0"
-    agent = train_agent("highway-fast-v0",save_file="q_learning_agent.pk3")
+    agent = train_agent(save_file="q_learning_agent.pkl")
     test_agent(agent, record=True)
 
     # To load and test an existing agent, uncomment the following lines:
