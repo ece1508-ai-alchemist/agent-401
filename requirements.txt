@@ -9,3 +9,4 @@ pre-commit
 moviepy
 stable_baselines3
 tensorboard
+openpyxl
