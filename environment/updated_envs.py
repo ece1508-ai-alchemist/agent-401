@@ -2,6 +2,7 @@ from typing import Dict, Text
 
 import numpy as np
 from highway_env import utils
+from highway_env import register_highway_envs
 from highway_env.envs.merge_env import MergeEnv
 from highway_env.envs.roundabout_env import RoundaboutEnv
 from highway_env.vehicle.controller import ControlledVehicle, MDPVehicle
@@ -36,9 +37,9 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
     def _rewards(self, action: int) -> Dict[Text, float]:
         if isinstance(action, (int, np.int_)):
 
-            lane_change_reward = action in [0, 2]
+            lane_change_reward = 0
         else:
-            lane_change_reward = action[1] != 0
+            lane_change_reward = 0
         return {
             "collision_reward": self.vehicle.crashed,
             "high_speed_reward": MDPVehicle.get_speed_index(self.vehicle)
