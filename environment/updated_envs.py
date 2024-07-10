@@ -34,6 +34,33 @@ class ModifiedMergeEnv(MergeEnv):
 
 
 class ModifiedRoundaboutEnv(RoundaboutEnv):
+    @classmethod
+    def default_config(cls) -> dict:
+        config = super().default_config()
+        config.update({
+            "observation": {
+                "type": "Kinematics",
+                "absolute": True,
+                "features_range": {"x": [-100, 100], "y": [-100, 100], "vx": [-15, 15], "vy": [-15, 15]},
+            },
+            "action": {
+                "type": "ContinuousAction",
+                "target_speeds": [0, 8, 16]
+            },
+            "offroad_terminal": True,
+            "incoming_vehicle_destination": None,
+            "collision_reward": -1,
+            "high_speed_reward": 0.2,
+            "right_lane_reward": 0,
+            "lane_change_reward": -0.05,
+            "screen_width": 600,
+            "screen_height": 600,
+            "centering_position": [0.5, 0.6],
+            "duration": 11,
+            "normalize_reward": True
+        })
+        return config
+    
     def _rewards(self, action: int) -> Dict[Text, float]:
         if isinstance(action, (int, np.int_)):
 
