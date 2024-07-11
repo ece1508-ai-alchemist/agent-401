@@ -16,7 +16,7 @@ if __name__ == "__main__":
     batch_size = 64
     
     # Create log dir
-    log_dir = "roundanout_SAC/"
+    log_dir = "roundabout_SAC/"
     os.makedirs(log_dir, exist_ok=True)
 
     # Default environments
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         # Create a non-vectorized environment for recording with render_mode="rgb_array"
         env = gym.make("ModifiedRoundaboutEnv-v0", render_mode="rgb_array")
         env = RecordVideo(
-            env, video_folder="ModifiedRoundaboutEnv_SAC/videos", episode_trigger=lambda e: True
+            env, video_folder=log_dir + "videos", episode_trigger=lambda e: True
         )
         env.unwrapped.set_record_video_wrapper(env)
 
