@@ -39,7 +39,9 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
         # Storage Val
         self.prev_lane_idx = None
         self.prev_best_distance = None # Some very high value
-        self.prev_position = None
+        self.prev_distance = None
+        self.prev_dest_position = None
+        self.dest_position = None
         
         super().__init__(config, render_mode)
 
@@ -51,7 +53,7 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
         config.update({
             "observation": {
                 "type": "OccupancyGrid",
-                "features": ['presence', 'on_road'],
+                "features": ['presence', 'vx', 'vy',  'on_road'],
                 "grid_size": [[-18, 18], [-18, 18]],
                 "grid_step": [3, 3],
                 "as_image": False,
@@ -59,12 +61,12 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
             },
             "action": {
                 "type": "ContinuousAction",
-                "target_speeds": [0, 8, 16]
+                "target_speeds": [0, 1, 2, 3, 4, 6, 8, 12, 16] # This is distribution is by design. We want to make the low speed dense to penalize slow speeds
             },
             #"offroad_terminal": True,
             "incoming_vehicle_destination": None,
             "collision_reward": -1, # Never crash
-            "high_speed_reward": 0.2,
+            "high_speed_reward": 0.7,
             "lane_centering_cost": 4,
             "lane_centering_reward": 1, # Reward for staying in center
             "lane_change_reward": -0.05, # Penalty for changing lanes unnecessarily
@@ -73,9 +75,9 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
             "screen_height": 600,
             "centering_position": [0.5, 0.6],
             "duration": 11,
-            "progress_reward": 0.3, # Try to move closer
-            "distance_reward": 1, # Closer is better
-            "backtrack_reward": -0.3, # Do not backtrack 
+            #"progress_reward": 0.3, # Try to move closer
+            #"distance_reward": 1, # Closer is better
+            #"backtrack_reward": -0.3, # Do not backtrack 
             "normalize_reward": True #TODO - Do we need this?
         })
         return config
@@ -87,6 +89,7 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
         if self.config["normalize_reward"]:
             reward = utils.lmap(reward, [self.config["collision_reward"], 1], [0, 1]) #TODO - set better interval?
         reward *= rewards["on_road_reward"]
+        reward *= rewards["progress_reward"]
         return reward
 
     def _rewards(self, action: np.ndarray) -> Dict[Text, float]:
@@ -99,21 +102,42 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
 
         self.prev_lane_idx = self.vehicle.lane_index
 
-        distance = np.linalg.norm(self.vehicle.destination-self.vehicle.position)
-        if self.prev_best_distance is not None and distance < self.prev_best_distance:
+        # Scenarios:
+        # On initial dest -> take any value
+        # When passing a destination: self.prev_dest <- self.dest <- new dest
+        # If toggling at dest: if self.prev_dest == "new" dest, no change
+        if self.dest_position is None:
+            self.dest_position = self.vehicle.destination
+        elif not np.array_equal(self.dest_position, self.vehicle.destination): 
+            # If the position changed -> check we're not going back and forth
+            if self.prev_dest_position is None:
+                self.prev_dest_position = self.dest_position
+                self.dest_position = self.vehicle.destination
+            elif not np.array_equal(self.prev_dest_position, self.vehicle.destination):
+                self.prev_dest_position = self.dest_position
+                self.dest_position = self.vehicle.destination
+
+        distance = np.linalg.norm(self.dest_position-self.vehicle.position)
+
+        if self.prev_best_distance is not None and distance < (self.prev_best_distance - 0.001): # Small delta to guarantee progress
             progress_reward = 1 # Reward for making progress
+        elif self.prev_distance is not None and distance < (self.prev_distance - 0.001):
+            progress_reward = 0.1
         else:
             progress_reward = 0
 
-        if self.prev_best_distance is not None and distance > self.prev_best_distance:
-            backtrack_reward = 1
-        else:
-            backtrack_reward = 0
+        #if self.prev_best_distance is not None and distance > self.prev_best_distance:
+        #    backtrack_reward = 1
+        #else:
+        #    backtrack_reward = 0
 
+        self.prev_distance = distance
         if self.prev_best_distance is None:
             self.prev_best_distance = distance
         else:
             self.prev_best_distance = min(self.prev_best_distance, distance)
+
+        #print("route", self.vehicle.route)
         #print("destination", self.vehicle.destination, "position", self.vehicle.position, "direction", self.vehicle.destination_direction, "distance", np.linalg.norm(self.vehicle.destination-self.vehicle.position))
         return {
             "lane_centering_reward": 1/(1+self.config["lane_centering_cost"]*lateral**2),
@@ -123,9 +147,9 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
             "lane_change_reward": lane_change_reward,
             "collision_reward": self.vehicle.crashed,
             "on_road_reward": self.vehicle.on_road,
-            "distance_reward": 1 / (distance + 1),
+            #"distance_reward": 1 / (distance + 1),
             "progress_reward": progress_reward, 
-            "backtrack_reward": backtrack_reward
+            #"backtrack_reward": backtrack_reward
         }
     
     def _is_terminated(self) -> bool:
@@ -159,6 +183,8 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
             if path:
                 #print("success", path)
                 ego_vehicle.route = [ego_vehicle.lane_index] + [(path[i], path[i + 1], None) for i in range(len(path) - 1)]
+                #print("path", path)
+                #print("lane index", ego_vehicle.lane_index)
             else:
                 ego_vehicle.route = [ego_vehicle.lane_index]
             #print("success", ego_vehicle.route)

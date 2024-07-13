@@ -10,7 +10,7 @@ from environment.updated_envs import ModifiedMergeEnv, ModifiedRoundaboutEnv  # 
 
 
 if __name__ == "__main__":
-    TRAIN = True
+    TRAIN = False
     TEST = True
     n_cpu = 6
     batch_size = 64
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     
     # Train the model
     if TRAIN:
-        model.learn(total_timesteps=int(1e5), callback=callback)
+        model.learn(total_timesteps=int(3e5), callback=callback)
         model.save(os.path.join(log_dir, "model"))
         del model  # Remove to demonstrate saving and loading
 
