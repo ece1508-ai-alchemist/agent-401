@@ -24,10 +24,10 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         self.rewards = []
 
         # Create Excel file if it doesn't exist
-        self.xlsx_path = os.path.join(log_dir, 'rewards.xlsx')
-        if not os.path.exists(self.xlsx_path):
-            df = pd.DataFrame(columns=['Timestep', 'Reward'])
-            df.to_excel(self.xlsx_path, index=False)
+        #self.xlsx_path = os.path.join(log_dir, 'rewards.xlsx')
+        #if not os.path.exists(self.xlsx_path):
+        #    df = pd.DataFrame(columns=['Timestep', 'Reward'])
+        #    df.to_excel(self.xlsx_path, index=False)
 
     def _init_callback(self) -> None:
         # Create folder if needed
@@ -56,8 +56,8 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
                     self.model.save(self.save_path)
 
                 # Update Excel file incrementally
-                df = pd.DataFrame({'Timestep': [self.num_timesteps], 'Reward': [mean_reward]})
-                with pd.ExcelWriter(self.xlsx_path, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
-                    df.to_excel(writer, index=False, startrow=writer.sheets['Sheet1'].max_row, header=False)
+                #df = pd.DataFrame({'Timestep': [self.num_timesteps], 'Reward': [mean_reward]})
+                #with pd.ExcelWriter(self.xlsx_path, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
+                #    df.to_excel(writer, index=False, startrow=writer.sheets['Sheet1'].max_row, header=False)
 
         return True
