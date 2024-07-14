@@ -4,16 +4,17 @@ from stable_baselines3 import SAC
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
 from stable_baselines3.common.env_util import make_vec_env
 from gymnasium.wrappers import RecordVideo
-from utils.callbacks import SaveOnBestTrainingRewardCallback
+from DeepRL.utils.callbacks import SaveOnBestTrainingRewardCallback
+from DeepRL.utils.log_collector import convert_events_to_csv
 import highway_env  # noqa: F401
 
 if __name__ == "__main__":
     TRAIN = True
-    TEST = False
+    TEST = True
     n_cpu = 6
     batch_size = 64
     
-    # Create log dir
+    # Create log dir 
     log_dir = "racetrack_sac/"
     os.makedirs(log_dir, exist_ok=True)
     
@@ -35,12 +36,13 @@ if __name__ == "__main__":
     
     # Create the callback: check every 1000 steps
     callback = SaveOnBestTrainingRewardCallback(check_freq=1000, log_dir=log_dir)
-    
+
     # Train the model
     if TRAIN:
         model.learn(total_timesteps=int(1e5), callback=callback)
         model.save(os.path.join(log_dir, "model"))
         del model  # Remove to demonstrate saving and loading
+        convert_events_to_csv(log_dir)
 
     if TEST:
         # Load the trained model
@@ -49,7 +51,7 @@ if __name__ == "__main__":
         # Create a non-vectorized environment for recording with render_mode="rgb_array"
         env = gym.make("racetrack-v0", render_mode="rgb_array")
         env = RecordVideo(
-            env, video_folder="racetrack_sac/videos", episode_trigger=lambda e: True
+            env, video_folder=log_dir + "videos", episode_trigger=lambda e: True
         )
         env.unwrapped.set_record_video_wrapper(env)
 
