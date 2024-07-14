@@ -10,7 +10,7 @@ import highway_env  # noqa: F401
 
 if __name__ == "__main__":
     TRAIN = True
-    TEST = False
+    TEST = True
     n_cpu = 6
     batch_size = 64
     
@@ -51,7 +51,7 @@ if __name__ == "__main__":
         # Create a non-vectorized environment for recording with render_mode="rgb_array"
         env = gym.make("racetrack-v0", render_mode="rgb_array")
         env = RecordVideo(
-            env, video_folder="racetrack_sac/videos", episode_trigger=lambda e: True
+            env, video_folder=log_dir + "videos", episode_trigger=lambda e: True
         )
         env.unwrapped.set_record_video_wrapper(env)
 
