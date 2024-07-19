@@ -1,9 +1,12 @@
+numpy<2.0
 pygame
 gym
 tqdm
-highway-env
 jupyterlab
 notebook
 matplotlib
 pre-commit
 moviepy
+stable_baselines3
+tensorboard
+openpyxl
