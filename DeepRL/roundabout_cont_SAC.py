@@ -1,4 +1,5 @@
 import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import gymnasium as gym
 from stable_baselines3 import SAC
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecMonitor
@@ -10,7 +11,7 @@ from environment.updated_envs import ModifiedMergeEnv, ModifiedRoundaboutEnv  # 
 
 
 if __name__ == "__main__":
-    TRAIN = False
+    TRAIN = True
     TEST = True
     n_cpu = 6
     batch_size = 64

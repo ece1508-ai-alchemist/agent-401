@@ -61,6 +61,8 @@ class ModifiedRoundaboutEnv(RoundaboutEnv):
             },
             "action": {
                 "type": "ContinuousAction",
+                "longitudinal": False,
+                "lateral": True,
                 "target_speeds": [0, 1, 2, 3, 4, 6, 8, 12, 16] # This is distribution is by design. We want to make the low speed dense to penalize slow speeds
             },
             #"offroad_terminal": True,
