@@ -1,6 +1,9 @@
 import gymnasium as gym
+import os
+import sys
+sys.path.append(os.getcwd())
 from gymnasium.envs.registration import register
-from environment.updated_envs import ModifiedMergeEnv, ModifiedRoundaboutEnv  # noqa
+# from environment.updated_envs import ModifiedMergeEnv, ModifiedRoundaboutEnv  # noqa
 from matplotlib import pyplot as plt
 
 register(id="401-v0", entry_point="environment.highway401:Highway401")

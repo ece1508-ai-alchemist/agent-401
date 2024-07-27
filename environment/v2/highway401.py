@@ -15,6 +15,7 @@ from highway_env.road.road import RoadNetwork
 from highway_env.vehicle.controller import ControlledVehicle
 from highway_env.vehicle.kinematics import Vehicle
 from highway_env.vehicle.objects import Obstacle
+from gymnasium.utils import seeding
 
 LaneIndex = Tuple[str, str, int]
 Route = List[LaneIndex]
@@ -838,12 +839,83 @@ class Highway401(AbstractEnv):
             if vehicle in self.controlled_vehicles
                or not (is_leaving(vehicle) or vehicle.route is None)
         ]
+    
+    def observe(self):
+        """
+        Return the current observation.
+        
+        :return: The current observation.
+        """
+        return self.observation_type.observe()
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, dict]:
-        obs, reward, terminated, truncated, info = super().step(action)
+    # def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, dict]:
+    #     obs, reward, terminated, truncated, info = super().step(action)
+    #     self._clear_vehicles()
+    #     self._spawn_vehicle(spawn_probability=self.config["spawn_probability"])
+    #     return obs, reward, terminated, truncated, info
+
+    def step(self, actions: List[int]) -> Tuple[List[np.ndarray], List[float], List[bool], List[bool], List[dict]]:
+        """
+    Step the environment forward for each agent.
+
+    :param actions: A list of actions for each agent.
+    :return: A tuple containing observations, rewards, done flags, truncated flags, and info for each agent.
+    """
+        if not isinstance(actions, list):
+            actions = [actions]
+
+        obs, rewards, terminated, truncated, infos = [], [], [], [], []
+
+        for i, action in enumerate(actions):
+            # # Debugging log
+            # print(f"Stepping agent {i} with action {action}")
+            try:
+                self.vehicle = self.controlled_vehicles[i]
+                agent_obs, agent_reward, agent_done, agent_truncated, agent_info = super(Highway401, self).step(action)
+            except Exception as e:
+                print(f"Error in agent {i}: {e}")
+                raise
+            obs.append(agent_obs)
+            rewards.append(agent_reward)
+            terminated.append(agent_done)
+            truncated.append(agent_truncated)
+            infos.append(agent_info)
+    
         self._clear_vehicles()
         self._spawn_vehicle(spawn_probability=self.config["spawn_probability"])
-        return obs, reward, terminated, truncated, info
+
+        # Ensure `infos` is a dictionary
+        info_dict = {'infos': infos}
+        # Sum rewards for a single reward value
+        total_reward = sum(rewards)
+
+        # Aggregate done flags (any agent done means episode done)
+        done_flag = any(terminated)
+        truncated_flag = any(truncated)
+        # Combine observations into a single array
+        obs_array = np.array(obs)
+
+        return obs_array, total_reward, done_flag, truncated_flag, info_dict
+    def reset(self, *, seed=None, options=None):
+        """
+        Reset the environment to an initial state and return an initial observation.
+        
+        This method should also accept a `seed` argument to seed the environment's random number generator.
+        
+        :param seed: The seed value for the random number generator.
+        :param options: Additional options for the reset method.
+        :return: The initial observation.
+        """
+        if seed is not None:
+            self.seed(seed)
+        self._reset()
+        obs = self.observe()
+        return obs, self._info(obs)  # Ensure _info is passed obs
+    
+    def seed(self, seed=None):
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]    
+    
 
     def has_arrived(self, vehicle: Vehicle, exit_distance: float = 25) -> bool:
         return (
