@@ -1,0 +1,9 @@
+{
+    "policy_kwargs": {
+        "net_arch": [256, 256]
+    },
+    "batch_size": 64,
+    "learning_rate": 0.0005,
+    "gamma": 0.99,
+    "n_cpu": 6
+}

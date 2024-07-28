@@ -1,0 +1,6 @@
+{
+    "batch_size": 64,
+    "learning_rate": 0.0005,
+    "gamma": 0.99,
+    "n_cpu": 6
+}
