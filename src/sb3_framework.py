@@ -9,12 +9,16 @@ from sb3_utils.callbacks import SaveOnBestTrainingRewardCallback
 from sb3_utils.log_collector import convert_events_to_csv
 from sb3_utils.misc import load_hyperparameters, cnn_config_env, make_cnn_train_env
 import highway_env  # noqa: F401
+from environments.register_envs import register_envs
 
 
 def main(args):
     TRAIN = args.train_steps > 0
     TEST = args.test_runs > 0
     CALLBACK_STEPS = 1000
+
+    # Register custom environments
+    register_envs()
     
     # Load hyperparameters
     hyperparameters = load_hyperparameters(args.agent, args.network)
