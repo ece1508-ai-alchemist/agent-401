@@ -1,0 +1,4 @@
+{
+    "base_config": "rl_agents_configs/HighwayEnv/agents/DQNAgent/dqn.json",
+    "double": true
+}

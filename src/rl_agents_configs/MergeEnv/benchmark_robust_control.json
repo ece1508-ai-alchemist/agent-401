@@ -1,0 +1,20 @@
+{
+    "environments": [
+        "rl_agents_configs/MergeEnv/env_agg.json",
+        "rl_agents_configs/MergeEnv/env_def.json"
+    ],
+    "agents": [
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_aggressive.json",
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_defensive.json",
+        "rl_agents_configs/MergeEnv/agents/DiscreteRobustPlannerAgent/agg_def.json",
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_aggressive.json",
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_defensive.json",
+        "rl_agents_configs/MergeEnv/agents/DiscreteRobustPlannerAgent/agg_def.json",
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_aggressive.json",
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_defensive.json",
+        "rl_agents_configs/MergeEnv/agents/DiscreteRobustPlannerAgent/agg_def.json",
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_aggressive.json",
+        "rl_agents_configs/MergeEnv/agents/MCTSAgent/assume_defensive.json",
+        "rl_agents_configs/MergeEnv/agents/DiscreteRobustPlannerAgent/agg_def.json"
+    ]
+}

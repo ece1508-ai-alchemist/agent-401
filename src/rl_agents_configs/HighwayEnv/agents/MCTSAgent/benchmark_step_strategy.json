@@ -1,0 +1,8 @@
+{
+    "environments": ["rl_agents_configs/HighwayEnv/env.json"],
+    "agents": [
+        "rl_agents_configs/HighwayEnv/agents/MCTSAgent/step_prior.json",
+        "rl_agents_configs/HighwayEnv/agents/MCTSAgent/step_reset.json",
+        "rl_agents_configs/HighwayEnv/agents/MCTSAgent/step_subtree.json"
+    ]
+}

@@ -1,0 +1,30 @@
+{
+    "environments": ["rl_agents_configs/HighwayEnv/env.json"],
+    "agents": [
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop-1.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/laplace.json",
+        "rl_agents_configs/HighwayEnv/agents/DeterministicPlannerAgent/baseline.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop-1.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/laplace.json",
+        "rl_agents_configs/HighwayEnv/agents/DeterministicPlannerAgent/baseline.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop-1.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/laplace.json",
+        "rl_agents_configs/HighwayEnv/agents/DeterministicPlannerAgent/baseline.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop-1.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/laplace.json",
+        "rl_agents_configs/HighwayEnv/agents/DeterministicPlannerAgent/baseline.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/kl-olop-1.json",
+        "rl_agents_configs/HighwayEnv/agents/OLOPAgent/laplace.json",
+        "rl_agents_configs/HighwayEnv/agents/DeterministicPlannerAgent/baseline.json"
+    ]
+}

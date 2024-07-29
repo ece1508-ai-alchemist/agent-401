@@ -1,0 +1,12 @@
+{
+    "environments": [
+        "rl_agents_configs/RoundaboutEnv/env.json"
+    ],
+    "agents": [
+        "rl_agents_configs/RoundaboutEnv/agents/DeterministicPlannerAgent/baseline.json",
+        "rl_agents_configs/RoundaboutEnv/agents/DeterministicPlannerAgent/assume_random_route.json",
+        "rl_agents_configs/RoundaboutEnv/agents/DiscreteRobustPlannerAgent/routes.json",
+        "rl_agents_configs/RoundaboutEnv/agents/DeterministicPlannerAgent/assume_random_behaviour.json",
+        "rl_agents_configs/RoundaboutEnv/agents/IntervalRobustPlannerAgent/behaviours.json"
+    ]
+}

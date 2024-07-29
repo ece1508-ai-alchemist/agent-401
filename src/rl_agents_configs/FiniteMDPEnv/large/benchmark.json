@@ -1,0 +1,12 @@
+{
+    "environments": [
+        "rl_agents_configs/FiniteMDPEnv/large/env_1.json",
+        "rl_agents_configs/FiniteMDPEnv/large/env_2.json"
+    ],
+    "agents": [
+        "rl_agents_configs/FiniteMDPEnv/large/agents/value_iteration.json",
+        "rl_agents_configs/FiniteMDPEnv/large/agents/mcts.json",
+        "rl_agents_configs/FiniteMDPEnv/large/agents/robust_value_iteration.json",
+        "rl_agents_configs/FiniteMDPEnv/large/agents/discrete_robust_planner.json"
+    ]
+}

@@ -1,0 +1,10 @@
+{
+    "environments": [
+        "rl_agents_configs/FiniteMDPEnv/anti_vi/env_1.json",
+        "rl_agents_configs/FiniteMDPEnv/anti_vi/env_2.json"
+    ],
+    "agents": [
+        "rl_agents_configs/FiniteMDPEnv/anti_vi/agents/robust_value_iteration.json",
+        "rl_agents_configs/FiniteMDPEnv/anti_vi/agents/discrete_robust_planner.json"
+    ]
+}

@@ -1,0 +1,9 @@
+{
+    "environments": ["rl_agents_configs/HighwayEnv/env.json"],
+    "agents": [
+        "rl_agents_configs/HighwayEnv/agents/MCTSAgent/iterations20.json",
+        "rl_agents_configs/HighwayEnv/agents/MCTSAgent/iterations50.json",
+        "rl_agents_configs/HighwayEnv/agents/MCTSAgent/iterations75.json",
+        "rl_agents_configs/HighwayEnv/agents/MCTSAgent/iterations100.json"
+    ]
+}
