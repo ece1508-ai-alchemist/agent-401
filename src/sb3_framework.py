@@ -7,7 +7,8 @@ from stable_baselines3.common.env_util import make_vec_env
 from gymnasium.wrappers import RecordVideo
 from sb3_utils.callbacks import SaveOnBestTrainingRewardCallback
 from sb3_utils.log_collector import convert_events_to_csv
-from sb3_utils.misc import load_hyperparameters, cnn_config_env, make_cnn_train_env
+from sb3_utils.misc import load_hyperparameters
+from environments.cnn_convert import cnn_config_env, make_cnn_train_env
 import highway_env  # noqa: F401
 from environments.register_envs import register_envs
 

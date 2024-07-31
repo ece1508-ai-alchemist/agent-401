@@ -96,7 +96,7 @@ class Highway401(AbstractEnv):
                 "right_lane_reward": 0.1,
                 "high_speed_reward": 0.2,
                 "reward_speed_range": [20, 30],
-                "controlled_vehicles": 2,
+                "controlled_vehicles": 1,
                 "merging_speed_reward": -0.5,
                 "lane_change_reward": -0.05,
                 "screen_width": 800,
@@ -113,7 +113,8 @@ class Highway401(AbstractEnv):
                     "nxs",
                     "nxr",
                 ],
-                "spawn_probability": 0.3,
+                "spawn_probability": 0.5,
+                "duration": 60,
             }
         )
         return config
@@ -755,22 +756,21 @@ class Highway401(AbstractEnv):
         road = self.road
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
 
-        for position, speed in [(5, 35), (50, 25), (150, 15), (0, 30)]:
-            lane = road.network.get_lane(("a", "b", np.random.choice(range(2))))
-            position = lane.position(position + self.np_random.uniform(-5, 5), 0)
-            speed += self.np_random.uniform(-1, 1)
-            v = other_vehicles_type(road, position, speed=speed)
-            v.plan_route_to(
-                np.random.choice(self.config["other_vehicles_destinations"])
-            )
-            road.vehicles.append(v)
+        # 
+        for position, speed in [(5, 20), (50, 25), (150, 15), (0, 30)]:
+            if self.np_random.uniform() < self.config["spawn_probability"]:
+                lane = road.network.get_lane(("a", "b", np.random.choice(range(2))))
+                position = lane.position(position + self.np_random.uniform(-2, 2), 0)
+                speed += self.np_random.uniform(-1, 1)
+                v = other_vehicles_type(road, position, speed=speed)
+                v.plan_route_to(
+                    np.random.choice(self.config["other_vehicles_destinations"])
+                )
+                road.vehicles.append(v)
 
         destination = self.config["destination"] or "o" + str(
             self.np_random.integers(1, 4)
         )
-
-        # Challenger vehicle
-        self._spawn_vehicle()
 
         start_lanes = [("m1", "m2", 0), ("a", "b", 0), ("a", "b", 1)]
 

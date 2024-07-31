@@ -17,6 +17,7 @@ Options:
   --test                 Test the agent.
   --verbose              Set log level to debug instead of info.
   --repeat <times>       Repeat several times [default: 1].
+  --cnn                  Use cnn model and observation [EXPERIMENTAL]
 """
 import datetime
 import os
@@ -31,6 +32,7 @@ from rl_agents.trainer import logger
 from rl_agents.trainer.evaluation import Evaluation
 from rl_agents.agents.common.factory import load_agent, load_environment
 from environments.register_envs import register_envs
+from environments.cnn_convert import cnn_config_env, make_cnn_train_env
 
 BENCHMARK_FILE = 'benchmark_summary'
 LOGGING_CONFIG = 'rl_agents_configs/logging.json'
@@ -62,6 +64,8 @@ def evaluate(environment_config, agent_config, options):
     if options['--verbose']:
         logger.configure(VERBOSE_CONFIG)
     env = load_environment(environment_config)
+    if options['--cnn']:
+        cnn_config_env(env)
     agent = load_agent(agent_config, env)
     run_directory = None
     if options['--name-from-config']:
