@@ -1,0 +1,25 @@
+{
+    "__class__": "<class 'rl_agents.agents.deep_q_network.pytorch.DQNAgent'>",
+    "model": {
+        "type": "ConvolutionalNetwork",
+        "in_channels": 4,
+        "in_width": 128,
+        "in_heigh": 64
+    },
+    "double": false,
+    "loss_function": "l2",
+    "optimizer": {
+        "lr": 5e-4
+    },
+    "gamma": 0.8,
+    "n_steps": 1,
+    "batch_size": 32,
+    "memory_capacity": 15000,
+    "target_update": 50,
+    "exploration": {
+        "method": "EpsilonGreedy",
+        "tau": 6000,
+        "temperature": 1.0,
+        "final_temperature": 0.05
+    }
+}
