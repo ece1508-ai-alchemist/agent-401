@@ -3,8 +3,8 @@
     "model": {
         "type": "ConvolutionalNetwork",
         "in_channels": 4,
-        "in_width": 128,
-        "in_heigh": 64
+        "in_width": 64,
+        "in_height": 128
     },
     "double": false,
     "loss_function": "l2",
