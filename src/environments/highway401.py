@@ -113,7 +113,7 @@ class Highway401(AbstractEnv):
                     "nxs",
                     "nxr",
                 ],
-                "spawn_probability": 0.5,
+                "spawn_probability": 0.1,
                 "duration": 60,
             }
         )
@@ -791,7 +791,7 @@ class Highway401(AbstractEnv):
         other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
 
         # 
-        for position, speed in [(5, 20), (50, 25), (150, 15), (0, 30)]:
+        for position, speed in [(100, 20), (50, 25), (150, 20), (0, 30)]:
             if self.np_random.uniform() < self.config["spawn_probability"]:
                 lane = road.network.get_lane(("a", "b", np.random.choice(range(2))))
                 position = lane.position(position + self.np_random.uniform(-2, 2), 0)
