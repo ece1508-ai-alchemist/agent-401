@@ -94,11 +94,11 @@ class Highway401(AbstractEnv):
                 "action": {"type": "DiscreteMetaAction"},
                 "collision_reward": -1,
                 "right_lane_reward": 0.1,
-                "high_speed_reward": 0.2,
+                "high_speed_reward": 0.5,
                 "reward_speed_range": [20, 30],
                 "controlled_vehicles": 1,
                 "merging_speed_reward": -0.5,
-                "lane_change_reward": -0.05,
+                "lane_change_reward": 0,
                 "screen_width": 800,
                 "screen_height": 800,
                 "offroad_terminal": True,
@@ -141,14 +141,48 @@ class Highway401(AbstractEnv):
             [0, 1],
         )
 
+    @staticmethod
+    def calculate_car_reward(speed_limit, car_speed, speed_reward):
+        import math
+        # Convert speeds to float to ensure precise calculations
+        speed_limit = float(speed_limit)
+        car_speed = float(car_speed)
+
+        # Calculate the difference between car speed and speed limit
+        speed_difference = car_speed - speed_limit
+
+        # Parameters for the reward function
+        optimal_difference = 0  # The ideal speed difference (right at the limit)
+        sigma = 5  # Controls the width of the Gaussian curve
+        penalty_factor = 0.1  # Controls how quickly the penalty increases
+
+        if speed_difference <= 0:
+            # Car is at or below speed limit: use Gaussian function
+            reward = speed_reward * math.exp(-((speed_difference - optimal_difference) ** 2) / (2 * sigma ** 2))
+        else:
+            # Car is above speed limit: use negative exponential function
+            reward = -speed_reward * (math.exp(penalty_factor * speed_difference) - 1)
+
+        return round(reward, 2)
+
     def _rewards(self, action: int) -> Dict[Text, float]:
-        scaled_speed = utils.lmap(
-            self.vehicle.speed, self.config["reward_speed_range"], [0, 1]
-        )
+        speed_rewards = 0
+        car_speed = self.vehicle.speed
+        lane_speed_limit = self.vehicle.lane.speed_limit
+        if not lane_speed_limit:
+            if car_speed in self.config["reward_speed_range"]:
+                speed_rewards = self.config["high_speed_reward"]
+        else:
+            speed_rewards = self.calculate_car_reward(
+                lane_speed_limit,
+                car_speed,
+                self.config["high_speed_reward"]
+            )
+
         return {
             "collision_reward": self.vehicle.crashed,
             "right_lane_reward": self.vehicle.lane_index[2] / 1,
-            "high_speed_reward": scaled_speed,
+            "high_speed_reward": speed_rewards,
             "lane_change_reward": action in [0, 2],
             "merging_speed_reward": sum(  # Altruistic penalty
                 (vehicle.target_speed - vehicle.speed) / vehicle.target_speed
@@ -433,7 +467,7 @@ class Highway401(AbstractEnv):
                 "o" + str(corner),
                 "ir" + str(corner),
                 StraightLane(
-                    start, end, line_types=[s, c], priority=priority, speed_limit=15
+                    start, end, line_types=[s, c], priority=priority, speed_limit=10
                 ),
             )
             # Right turn
@@ -481,7 +515,7 @@ class Highway401(AbstractEnv):
                 "ir" + str(corner),
                 "il" + str((corner + 2) % 4),
                 StraightLane(
-                    start, end, line_types=[s, n], priority=priority, speed_limit=15
+                    start, end, line_types=[s, n], priority=priority, speed_limit=10
                 ),
             )
             # Exit
@@ -493,7 +527,7 @@ class Highway401(AbstractEnv):
                 "il" + str((corner - 1) % 4),
                 "o" + str((corner - 1) % 4),
                 StraightLane(
-                    end, start, line_types=[n, c], priority=priority, speed_limit=15
+                    end, start, line_types=[n, c], priority=priority, speed_limit=10
                 ),
             )
 
