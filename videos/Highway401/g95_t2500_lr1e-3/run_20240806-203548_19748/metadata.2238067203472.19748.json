@@ -1,0 +1,108 @@
+{
+    "agent": {
+        "__class__": "<class 'rl_agents.agents.deep_q_network.pytorch.DQNAgent'>",
+        "batch_size": 32,
+        "device": "cuda:best",
+        "double": false,
+        "exploration": {
+            "final_temperature": 0.05,
+            "method": "EpsilonGreedy",
+            "tau": 2500,
+            "temperature": 1.0
+        },
+        "gamma": 0.95,
+        "loss_function": "l2",
+        "memory_capacity": 15000,
+        "model": {
+            "activation": "RELU",
+            "head_mlp": {
+                "activation": "RELU",
+                "in": null,
+                "layers": [],
+                "out": null,
+                "reshape": "True",
+                "type": "MultiLayerPerceptron"
+            },
+            "in_channels": 4,
+            "in_height": 128,
+            "in_width": 64,
+            "out": 5,
+            "type": "ConvolutionalNetwork"
+        },
+        "n_steps": 1,
+        "optimizer": {
+            "k": 5,
+            "lr": 0.001,
+            "type": "ADAM",
+            "weight_decay": 0
+        },
+        "target_update": 50
+    },
+    "env": {
+        "__class__": "<class 'gymnasium.wrappers.order_enforcing.OrderEnforcing'>",
+        "action": {
+            "action_config": {
+                "type": "DiscreteMetaAction"
+            },
+            "type": "MultiAgentAction"
+        },
+        "centering_position": [
+            0.3,
+            0.5
+        ],
+        "collision_reward": -1,
+        "controlled_vehicles": 2,
+        "destination": "sxr",
+        "duration": 60,
+        "high_speed_reward": 0.5,
+        "id": "401-v0",
+        "import_module": "highway_env",
+        "lane_change_reward": 0,
+        "manual_control": false,
+        "merging_speed_reward": -0.5,
+        "observation": {
+            "observation_config": {
+                "observation_shape": [
+                    128,
+                    64
+                ],
+                "scaling": 1.75,
+                "stack_size": 4,
+                "type": "GrayscaleObservation",
+                "weights": [
+                    0.2989,
+                    0.587,
+                    0.114
+                ]
+            },
+            "type": "MultiAgentObservation"
+        },
+        "offroad_terminal": true,
+        "offscreen_rendering": false,
+        "other_vehicles_destinations": [
+            "o1",
+            "o2",
+            "sxs",
+            "sxr",
+            "exs",
+            "exr",
+            "nxs",
+            "nxr"
+        ],
+        "other_vehicles_type": "highway_env.vehicle.behavior.IDMVehicle",
+        "policy_frequency": 1,
+        "real_time_rendering": false,
+        "render_agent": true,
+        "reward_speed_range": [
+            15,
+            20
+        ],
+        "right_lane_reward": 0.1,
+        "scaling": 5.5,
+        "screen_height": 800,
+        "screen_width": 800,
+        "show_trajectories": false,
+        "simulation_frequency": 15,
+        "spawn_probability": 0.1
+    }
+}

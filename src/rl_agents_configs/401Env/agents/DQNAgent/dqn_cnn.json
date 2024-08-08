@@ -9,16 +9,16 @@
     "double": false,
     "loss_function": "l2",
     "optimizer": {
-        "lr": 5e-4
+        "lr": 1e-3
     },
-    "gamma": 0.8,
+    "gamma": 0.95,
     "n_steps": 1,
     "batch_size": 32,
     "memory_capacity": 15000,
     "target_update": 50,
     "exploration": {
         "method": "EpsilonGreedy",
-        "tau": 6000,
+        "tau": 2500,
         "temperature": 1.0,
         "final_temperature": 0.05
     }

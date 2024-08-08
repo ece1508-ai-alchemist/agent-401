@@ -95,7 +95,7 @@ class Highway401(AbstractEnv):
                 "collision_reward": -1,
                 "right_lane_reward": 0.1,
                 "high_speed_reward": 0.5,
-                "reward_speed_range": [20, 30],
+                "reward_speed_range": [15, 20],
                 "controlled_vehicles": 1,
                 "merging_speed_reward": -0.5,
                 "lane_change_reward": 0,
@@ -847,7 +847,7 @@ class Highway401(AbstractEnv):
             longitudinal=(
                     longitudinal + 5 + self.np_random.normal() * position_deviation
             ),
-            speed=8 + self.np_random.normal() * speed_deviation,
+            speed=20 + self.np_random.normal() * speed_deviation,
         )
         for v in self.road.vehicles:
             if np.linalg.norm(v.position - vehicle.position) < 15:
